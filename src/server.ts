@@ -26,7 +26,7 @@ import {
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Security middleware
 app.use(helmet());
@@ -267,6 +267,11 @@ app.use(
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Server] SIGTERM received, shutting down gracefully');
+  console.log('[Server] Current environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    timestamp: new Date().toISOString(),
+  });
   process.exit(0);
 });
 
@@ -275,13 +280,38 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[Server] Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
 // Start server
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`[Server] Payment API proxy server running on port ${PORT}`);
-    console.log(`[Server] Health check available at http://localhost:${PORT}/health`);
-    console.log(`[Server] API documentation available at http://localhost:${PORT}/api`);
-  });
+const isMainModule = require.main === module;
+if (isMainModule) {
+  try {
+    console.log('[Server] Starting server with configuration:', {
+      PORT,
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+    });
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[Server] Payment API proxy server running on port ${PORT}`);
+      console.log(`[Server] Health check available at http://localhost:${PORT}/health`);
+      console.log(`[Server] API documentation available at http://localhost:${PORT}/api`);
+      console.log(`[Server] Server started successfully at ${new Date().toISOString()}`);
+    });
+  } catch (error) {
+    console.error('[Server] Failed to start server:', error);
+    process.exit(1);
+  }
 }
 
 export default app;

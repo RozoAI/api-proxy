@@ -36,11 +36,15 @@ export class PaymentService {
       const providerName = this.registry.getProviderForChain(chainId)?.name || 'daimo';
 
       // Save to database after successful creation
-      await this.paymentsRepository.createPayment(paymentRequest, paymentResponse, providerName);
+      const result = await this.paymentsRepository.createPayment(
+        paymentRequest,
+        paymentResponse,
+        providerName
+      );
 
-      console.log(`[PaymentService] Payment ${paymentResponse.id} saved to database`);
+      console.log(`[PaymentService] Payment ${result.id} saved to database`);
 
-      return paymentResponse;
+      return { ...paymentResponse, id: result.id };
     } catch (error) {
       console.error('[PaymentService] Error creating payment:', error);
       throw error;
