@@ -4,7 +4,7 @@
   "description": "API proxy server that forwards requests and logs them",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev:env": "ts-node-dev --respawn --transpile-only --env-file env.dev src/server.ts",
@@ -13,23 +13,23 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "axios": "^1.6.0",
+    "axios": "^1.10.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
-    "mysql2": "^3.14.1"
+    "typescript": "^5.8.3",
+    "mysql2": "^3.14.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/morgan": "^1.9.9",
-    "@types/node": "^20.10.0",
-    "ts-node": "^10.9.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.0"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^24.0.13",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0"
   },
   "keywords": [
     "api",
