@@ -69,14 +69,10 @@ export abstract class BaseProvider implements PaymentProvider {
       errors.push('Amount units is required');
     }
 
-    if (!paymentData.destination?.tokenSymbol) {
-      errors.push('Token symbol is required');
+    if (!paymentData.destination?.tokenSymbol && !paymentData.destination?.tokenAddress) {
+      errors.push('Token symbol or token address is required');
     }
-
-    if (!paymentData.destination?.tokenAddress) {
-      errors.push('Token address is required');
-    }
-
+    
     // Check if chain is supported
     const chainId = parseInt(paymentData.destination.chainId);
     if (!this.supportedChains.includes(chainId)) {

@@ -53,7 +53,7 @@ export class AquaProvider extends BaseProvider {
       const aquaResponse = await this.aquaClient.createInvoice(aquaRequest);
 
       // Transform Aqua response back to Daimo format
-      const daimoResponse = transformAquaResponseToDaimo(aquaResponse, paymentData);
+      const daimoResponse = transformAquaResponseToDaimo(aquaResponse, aquaRequest);
 
       this.logResponse(200, daimoResponse);
       console.log('[AquaProvider] Payment created successfully:', daimoResponse.id);

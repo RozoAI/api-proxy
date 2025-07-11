@@ -9,8 +9,9 @@ import { PaymentRequest, PaymentResponse } from '../types/payment';
 export interface AquaInvoiceRequest {
   mode: 'default' | 'web3';
   amount: number;
-  address: string;
-  token_id: string;
+  recipient: string;
+  token: string;
+  description: string;
   metadata?: any;
   callback_url?: string;
   cover_percent?: number;
@@ -56,11 +57,11 @@ export class AquaApiClient {
     try {
       console.log('[AquaApiClient] Creating invoice:', invoiceData);
 
-      const response = await fetch(`${this.config.baseUrl}/api/invoice`, {
+      const response = await fetch(`${this.config.baseUrl}/payment/invoice`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiToken}`,
+          'token': this.config.apiToken,
         },
         body: JSON.stringify(invoiceData),
         signal: AbortSignal.timeout(this.config.timeout)
