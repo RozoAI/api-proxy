@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   status_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  provider_response JSON,
-  metadata JSON,
-  original_request JSON NOT NULL
+  provider_response TEXT,
+  metadata TEXT,
+  original_request TEXT NOT NULL
 ); 
