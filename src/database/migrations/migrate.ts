@@ -87,7 +87,18 @@ export class MigrationRunner {
     for (const migration of pendingMigrations) {
       try {
         console.log(`Running migration: ${migration.filename}`);
-        await this.connection.execute(migration.sql);
+        
+        // Split SQL by semicolon and execute each statement separately
+        const statements = migration.sql
+          .split(';')
+          .map(stmt => stmt.trim())
+          .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+        
+        for (const statement of statements) {
+          if (statement.trim()) {
+            await this.connection.execute(statement);
+          }
+        }
         
         // Record the migration as executed
         await this.connection.execute(
@@ -125,11 +136,22 @@ export class MigrationRunner {
       if (lastMigration === '001_create_payments_table') {
         await this.connection.execute('DROP TABLE IF EXISTS payments');
       } else if (lastMigration === '002_create_indexes') {
-        await this.connection.execute('DROP INDEX IF EXISTS idx_payments_external_id ON payments');
-        await this.connection.execute('DROP INDEX IF EXISTS idx_payments_status ON payments');
-        await this.connection.execute('DROP INDEX IF EXISTS idx_payments_created_at ON payments');
-        await this.connection.execute('DROP INDEX IF EXISTS idx_payments_status_updated_at ON payments');
-        await this.connection.execute('DROP INDEX IF EXISTS idx_payments_status_updated ON payments');
+        // Drop indexes using ALTER TABLE syntax (MySQL compatible)
+        try {
+          await this.connection.execute('ALTER TABLE payments DROP INDEX idx_payments_external_id');
+        } catch (e) { /* Index might not exist */ }
+        try {
+          await this.connection.execute('ALTER TABLE payments DROP INDEX idx_payments_status');
+        } catch (e) { /* Index might not exist */ }
+        try {
+          await this.connection.execute('ALTER TABLE payments DROP INDEX idx_payments_created_at');
+        } catch (e) { /* Index might not exist */ }
+        try {
+          await this.connection.execute('ALTER TABLE payments DROP INDEX idx_payments_status_updated_at');
+        } catch (e) { /* Index might not exist */ }
+        try {
+          await this.connection.execute('ALTER TABLE payments DROP INDEX idx_payments_status_updated');
+        } catch (e) { /* Index might not exist */ }
       }
 
       // Remove migration record
@@ -156,7 +178,7 @@ export async function runMigrations(): Promise<void> {
   try {
     await runner.runMigrations();
   } finally {
-    await connection.end();
+    connection.release(); // Use release() instead of end() for pooled connections
   }
 }
 
@@ -170,7 +192,7 @@ export async function rollbackMigration(): Promise<void> {
   try {
     await runner.rollbackLastMigration();
   } finally {
-    await connection.end();
+    connection.release(); // Use release() instead of end() for pooled connections
   }
 }
 

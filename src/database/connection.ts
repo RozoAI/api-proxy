@@ -29,7 +29,7 @@ function getDatabaseConfig(): DatabaseConfig {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'api_proxy',
-    connectionLimit: 10 // Max 10 connections as per plan
+    connectionLimit:  parseInt(process.env.DB_CONNECTION_LIMIT || '10') // Max 10 connections as per plan
   };
 }
 

@@ -17,16 +17,17 @@ export function rawBodyParser(req: express.Request, res: express.Response, next:
     req.on('data', (chunk) => {
       data += chunk;
     });
-    req.on('end', () => {
+    req.on('end', (): void => {
       (req as any).rawBody = data;
       try {
         req.body = JSON.parse(data);
       } catch (error) {
         console.error('[WebhookMiddleware] Invalid JSON in webhook request:', error);
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'Invalid JSON payload'
         });
+        return;
       }
       next();
     });

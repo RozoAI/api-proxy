@@ -53,17 +53,17 @@ export class WebhookRouter {
         
         if (result.success) {
           console.log('[WebhookRouter] Daimo webhook processed successfully');
-          res.status(200).json(result);
+          return res.status(200).json(result);
         } else {
           console.error('[WebhookRouter] Daimo webhook processing failed:', result.error);
-          res.status(400).json(result);
+          return res.status(400).json(result);
         }
 
       } catch (error) {
         console.error('[WebhookRouter] Error processing Daimo webhook:', error);
         console.error('[WebhookRouter] Full Daimo webhook payload:', JSON.stringify(req.body, null, 2));
         
-        res.status(500).json({
+        return res.status(500).json({
           success: false,
           error: 'Internal server error processing webhook'
         });
@@ -102,17 +102,17 @@ export class WebhookRouter {
         
         if (result.success) {
           console.log('[WebhookRouter] Aqua webhook processed successfully');
-          res.status(200).json(result);
+          return res.status(200).json(result);
         } else {
           console.error('[WebhookRouter] Aqua webhook processing failed:', result.error);
-          res.status(400).json(result);
+          return res.status(400).json(result);
         }
 
       } catch (error) {
         console.error('[WebhookRouter] Error processing Aqua webhook:', error);
         console.error('[WebhookRouter] Full Aqua webhook payload:', JSON.stringify(req.body, null, 2));
         
-        res.status(500).json({
+        return res.status(500).json({
           success: false,
           error: 'Internal server error processing webhook'
         });
