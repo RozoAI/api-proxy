@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "API proxy server that forwards requests and logs them",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "build": "npx tsc",
     "start": "node dist/server.js",
