@@ -1,213 +1,283 @@
-import express, { Request, Response, NextFunction } from 'express';
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+/**
+ * Express Server Implementation
+ * Main server with API endpoints, middleware, and error handling
+ */
+
+import express from 'express';
 import cors from 'cors';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
-import path from 'path';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { json, urlencoded } from 'body-parser';
+import { PaymentRouter } from './routing/router';
+import { ProviderRegistry } from './providers/registry';
+import { DaimoProvider, AquaProvider } from './providers';
+import { getProviderConfig } from './config/providers';
+import { RequestResponseTransformer } from './utils/transformation';
+import { PaymentService } from './services/payment-service';
+import { checkDatabaseHealth } from './database/connection';
+import { WebhookRouter } from './webhooks/router';
+import { 
+  webhookLogger, 
+  webhookAuth, 
+  webhookRateLimit, 
+  webhookErrorHandler, 
+  webhookMonitoring 
+} from './middleware/webhook-middleware';
 
-// Load environment variables - check for env.dev first if in development
-if (process.env.NODE_ENV === 'development') {
-  dotenv.config({ path: path.join(__dirname, '..', 'env.dev') });
-} else {
-  dotenv.config();
-}
-
-interface ProxyConfig {
-  port: number;
-  backendUrl: string;
-  logRequests: boolean;
-  logResponses: boolean;
-  nodeEnv: string;
-}
-
-interface HealthResponse {
-  status: string;
-  timestamp: string;
-  backendUrl: string;
-  nodeEnv: string;
-  port: number;
-}
-
-interface ErrorResponse {
-  error: string;
-  message: string;
-  backendUrl?: string;
-}
-
+// Initialize Express app
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Configuration with type safety
-const config: ProxyConfig = {
-  port: parseInt(process.env.PORT || '3000', 10),
-  backendUrl: process.env.BACKEND_URL || 'http://localhost:8080',
-  logRequests: process.env.LOG_REQUESTS === 'true',
-  logResponses: process.env.LOG_RESPONSES === 'true',
-  nodeEnv: process.env.NODE_ENV || 'development',
-};
+// Security middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true
+}));
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
 
-// Custom logging middleware - only use morgan in development
-if (config.nodeEnv === 'development') {
-  app.use(morgan('dev'));
-}
+// Body parsing middleware
+app.use(json({ limit: '10mb' }));
+app.use(urlencoded({ extended: true, limit: '10mb' }));
 
-// Custom request/response logging middleware
-const logRequestResponse = (req: Request, res: Response, next: NextFunction): void => {
-  const originalSend = res.send;
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${req.ip}`);
   
-  // Log request
-  if (config.logRequests) {
-    console.log('\n=== INCOMING REQUEST ===');
-    console.log(`Method: ${req.method}`);
-    console.log(`URL: ${req.originalUrl}`);
-    console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log(`Request Body:`, JSON.stringify(req.body, null, 2));
-    }
-    console.log('========================\n');
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+  });
+  
+  next();
+});
+
+// Initialize provider registry and router
+const registry = new ProviderRegistry();
+
+// Register providers
+try {
+  // Register Daimo provider
+  const daimoConfig = getProviderConfig('daimo');
+  if (daimoConfig) {
+    const daimoProvider = new DaimoProvider(daimoConfig);
+    registry.registerProvider(daimoProvider);
+    console.log('[Server] Daimo provider registered successfully');
   }
 
-  // Intercept response to log it
-  res.send = function(data: any) {
-    if (config.logResponses) {
-      console.log('\n=== OUTGOING RESPONSE ===');
-      console.log(`Status: ${res.statusCode}`);
-      console.log(`Response Body:`, typeof data === 'string' ? data : JSON.stringify(data, null, 2));
-      console.log('=========================\n');
-    }
-    return originalSend.call(this, data);
-  };
+  // Register Aqua provider
+  const aquaConfig = getProviderConfig('aqua');
+  if (aquaConfig) {
+    const aquaProvider = new AquaProvider(aquaConfig);
+    registry.registerProvider(aquaProvider);
+    console.log('[Server] Aqua provider registered successfully');
+  }
+} catch (error) {
+  console.error('[Server] Error registering providers:', error);
+}
 
-  next();
-};
-
-app.use(logRequestResponse);
+const router = new PaymentRouter(registry);
+const paymentService = new PaymentService(router, registry);
+const webhookRouter = new WebhookRouter(paymentService);
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response): void => {
-  const healthResponse: HealthResponse = { 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    backendUrl: config.backendUrl,
-    nodeEnv: config.nodeEnv,
-    port: config.port
-  };
-  res.json(healthResponse);
-});
-
-// Development-only endpoint to show configuration
-if (config.nodeEnv === 'development') {
-  app.get('/config', (req: Request, res: Response): void => {
-    res.json({
-      config: {
-        ...config,
-        // Don't expose sensitive info in production
-        timestamp: new Date().toISOString()
-      }
-    });
-  });
-}
-
-// Forward all requests to backend
-app.all('*', async (req: Request, res: Response): Promise<void> => {
+app.get('/health', async (req, res) => {
   try {
-    const targetUrl = `${config.backendUrl}${req.originalUrl}`;
+    const stats = router.getRoutingStats();
+    const dbHealthy = await checkDatabaseHealth();
     
-    console.log(`\n🔄 Forwarding ${req.method} request to: ${targetUrl}`);
-
-    const axiosConfig: AxiosRequestConfig = {
-      method: req.method as any,
-      url: targetUrl,
-      headers: {
-        ...req.headers,
-        host: undefined, // Remove original host header
-        'x-forwarded-for': req.ip,
-        'x-forwarded-proto': req.protocol,
-        'x-forwarded-host': req.get('host'),
-      },
-      timeout: 30000, // 30 seconds timeout
+    const healthStatus = {
+      status: dbHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: dbHealthy ? 'connected' : 'disconnected',
+      providers: stats.providers,
+      routing: {
+        totalChains: stats.totalChains,
+        defaultProvider: stats.defaultProvider
+      }
     };
 
-    // Add request body for methods that support it
-    if (['post', 'put', 'patch'].includes(req.method.toLowerCase()) && req.body) {
-      axiosConfig.data = req.body;
-    }
-
-    // Add query parameters
-    if (req.query && Object.keys(req.query).length > 0) {
-      axiosConfig.params = req.query;
-    }
-
-    const response: AxiosResponse = await axios(axiosConfig);
-    
-    // Forward response headers (excluding some that shouldn't be forwarded)
-    const excludeHeaders = ['content-encoding', 'content-length', 'transfer-encoding', 'connection'];
-    Object.keys(response.headers).forEach(key => {
-      if (!excludeHeaders.includes(key.toLowerCase())) {
-        res.set(key, response.headers[key]);
-      }
-    });
-
-    res.status(response.status).send(response.data);
-    
+    res.status(dbHealthy ? 200 : 503).json(healthStatus);
   } catch (error) {
-    const axiosError = error as AxiosError;
-    console.error('\n❌ Error forwarding request:', axiosError.message);
-    
-    if (axiosError.response) {
-      // Backend responded with an error
-      console.error(`Backend error status: ${axiosError.response.status}`);
-      if (config.logResponses) {
-        console.error(`Backend error body:`, JSON.stringify(axiosError.response.data, null, 2));
-      }
-      
-      res.status(axiosError.response.status).json(axiosError.response.data);
-    } else if (axiosError.request) {
-      // Request was made but no response received
-      console.error('No response received from backend');
-      const errorResponse: ErrorResponse = {
-        error: 'Backend unavailable',
-        message: 'No response received from backend server',
-        backendUrl: config.backendUrl
-      };
-      res.status(502).json(errorResponse);
-    } else {
-      // Something else happened
-      console.error('Request setup error:', axiosError.message);
-      const errorResponse: ErrorResponse = {
-        error: 'Internal server error',
-        message: axiosError.message
-      };
-      res.status(500).json(errorResponse);
-    }
+    console.error('[Health] Health check failed:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
-// Start server
-app.listen(config.port, (): void => {
-  console.log(`\n🚀 API Proxy server running on port ${config.port}`);
-  console.log(`🎯 Forwarding requests to: ${config.backendUrl}`);
-  console.log(`🌍 Environment: ${config.nodeEnv}`);
-  console.log(`📊 Request logging: ${config.logRequests ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`📊 Response logging: ${config.logResponses ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`\n🔍 Health check available at: http://localhost:${config.port}/health`);
-  if (config.nodeEnv === 'development') {
-    console.log(`⚙️  Config endpoint available at: http://localhost:${config.port}/config`);
+// API Routes
+
+// Create payment endpoint
+app.post('/api/payment', async (req, res) => {
+  try {
+    console.log('[API] Creating payment:', req.body);
+    
+    const response = await paymentService.createPayment(req.body);
+    
+    res.status(201).json(response);
+  } catch (error) {
+    console.error('[API] Error creating payment:', error);
+    
+    const errorResponse = RequestResponseTransformer.createErrorResponse(
+      error, 
+      'payment_service'
+    );
+    
+    res.status(400).json(errorResponse);
   }
-  console.log('');
+});
+
+// Get payment by ID endpoint
+app.get('/api/payment/:paymentId', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { chainId } = req.query;
+    
+    console.log(`[API] Getting payment: ${paymentId}, chainId: ${chainId}`);
+    
+    const chainIdNum = chainId ? parseInt(chainId as string) : undefined;
+    const response = await paymentService.getPaymentById(paymentId, chainIdNum);
+    
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('[API] Error getting payment:', error);
+    
+    const errorResponse = RequestResponseTransformer.createErrorResponse(
+      error, 
+      'payment_service'
+    );
+    
+    res.status(404).json(errorResponse);
+  }
+});
+
+// Get payment by external ID endpoint
+app.get('/api/payment/external-id/:externalId', async (req, res) => {
+  try {
+    const { externalId } = req.params;
+    const { chainId } = req.query;
+    
+    console.log(`[API] Getting payment by external ID: ${externalId}, chainId: ${chainId}`);
+    
+    const chainIdNum = chainId ? parseInt(chainId as string) : undefined;
+    const response = await paymentService.getPaymentByExternalId(externalId, chainIdNum);
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('[API] Error getting payment by external ID:', error);
+    
+    const errorResponse = RequestResponseTransformer.createErrorResponse(
+      error, 
+      'payment_service'
+    );
+    
+    res.status(404).json(errorResponse);
+  }
+});
+
+// Provider status endpoint
+app.get('/api/providers/status', async (req, res) => {
+  try {
+    const providers = registry.getAllProviders();
+    const statusPromises = providers.map(async (provider) => {
+      const isHealthy = await provider.isHealthy();
+      return {
+        name: provider.name,
+        healthy: isHealthy,
+        supportedChains: provider.supportedChains
+      };
+    });
+
+    const statuses = await Promise.all(statusPromises);
+    
+    res.status(200).json({
+      providers: statuses,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[API] Error getting provider status:', error);
+    res.status(500).json({
+      error: 'Failed to get provider status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Routing statistics endpoint
+app.get('/api/routing/stats', (req, res) => {
+  try {
+    const stats = router.getRoutingStats();
+    res.status(200).json(stats);
+  } catch (error) {
+    console.error('[API] Error getting routing stats:', error);
+    res.status(500).json({
+      error: 'Failed to get routing statistics',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Webhook endpoints with middleware
+app.use('/webhooks', 
+  webhookRateLimit,
+  webhookLogger,
+  webhookAuth,
+  webhookMonitoring,
+  webhookRouter.getRouter(),
+  webhookErrorHandler
+);
+
+// Error handling middleware
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Route ${req.method} ${req.path} not found`
+  });
+});
+
+app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Server] Unhandled error:', error);
+  
+  const errorResponse = RequestResponseTransformer.createErrorResponse(
+    error, 
+    'server'
+  );
+  
+  res.status(500).json(errorResponse);
 });
 
 // Graceful shutdown
-process.on('SIGINT', (): void => {
-  console.log('\n👋 Shutting down API proxy server...');
+process.on('SIGTERM', () => {
+  console.log('[Server] SIGTERM received, shutting down gracefully');
   process.exit(0);
 });
 
-process.on('SIGTERM', (): void => {
-  console.log('\n👋 Shutting down API proxy server...');
+process.on('SIGINT', () => {
+  console.log('[Server] SIGINT received, shutting down gracefully');
   process.exit(0);
 }); 
+
+// Start server
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[Server] Payment API proxy server running on port ${PORT}`);
+    console.log(`[Server] Health check available at http://localhost:${PORT}/health`);
+    console.log(`[Server] API documentation available at http://localhost:${PORT}/api`);
+  });
+}
+
+export default app; 
