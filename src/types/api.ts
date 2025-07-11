@@ -3,7 +3,7 @@
  */
 
 import { Request, Response } from 'express';
-import { PaymentRequest } from './payment.js';
+import { PaymentRequest } from './payment';
 
 export interface ApiRequest extends Request {
   paymentData?: PaymentRequest;

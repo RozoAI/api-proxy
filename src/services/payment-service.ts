@@ -5,7 +5,7 @@
 
 import { PaymentRouter } from '../routing/router';
 import { PaymentRequest, PaymentResponse } from '../types/payment';
-import { PaymentRecord } from '../database/repositories/payments-repository.js';
+import { PaymentRecord } from '../database/repositories/payments-repository';
 import { PaymentsRepository } from '../database/repositories/payments-repository';
 import { ProviderRegistry } from '../providers/registry';
 import { initializeDatabase } from '../database/connection';

@@ -29,7 +29,6 @@ export type PaymentDestination = DaimoDestination | AquaDestination;
 export interface PaymentRequest {
   display: {
     intent: string;
-    paymentValue: string;
     currency: string;
   };
   destination: PaymentDestination;
@@ -43,7 +42,6 @@ export interface PaymentResponse {
   createdAt: string;
   display: {
     intent: string;
-    paymentValue: string;
     currency: string;
   };
   source: PaymentSource | null;

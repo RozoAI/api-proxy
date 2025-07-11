@@ -3,7 +3,7 @@
  * Implements the Daimo Pay API exactly as specified
  */
 
-import { BaseProvider } from './base-provider.js';
+import { BaseProvider } from './base-provider';
 import {
   PaymentRequest,
   PaymentResponse,
@@ -11,9 +11,9 @@ import {
   PaymentResponseDestination,
   PaymentStatus,
   ValidationResult,
-} from '../types/payment.js';
-import { ProviderConfig } from '../types/provider.js';
-import { ChainConfig, getChainsByProvider } from '../config/chains.js';
+} from '../types/payment';
+import { ProviderConfig } from '../types/provider';
+import { ChainConfig, getChainsByProvider } from '../config/chains';
 import { getChainConfig } from '../config/chains';
 
 export class DaimoProvider extends BaseProvider {
@@ -182,19 +182,14 @@ export class DaimoProvider extends BaseProvider {
     };
   }
 
-  private extractDisplay(display: unknown): {
-    intent: string;
-    paymentValue: string;
-    currency: string;
-  } {
+  private extractDisplay(display: unknown): { intent: string; currency: string } {
     if (!display || typeof display !== 'object') {
-      return { intent: 'Payment', paymentValue: '0.00', currency: 'USD' };
+      return { intent: 'Payment', currency: 'USD' };
     }
 
     const d = display as Record<string, unknown>;
     return {
       intent: typeof d.intent === 'string' ? d.intent : 'Payment',
-      paymentValue: typeof d.paymentValue === 'string' ? d.paymentValue : '0.00',
       currency: typeof d.currency === 'string' ? d.currency : 'USD',
     };
   }

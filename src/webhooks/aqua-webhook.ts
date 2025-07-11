@@ -206,7 +206,6 @@ export class AquaWebhookHandler implements WebhookHandler {
       createdAt: new Date(event.created_at).getTime().toString(),
       display: {
         intent: `Aqua Invoice ${event.invoice_id}`,
-        paymentValue: event.amount.toString(),
         currency: 'USD', // Default currency, could be enhanced based on token_id
       },
       source: null,
@@ -214,7 +213,7 @@ export class AquaWebhookHandler implements WebhookHandler {
         destinationAddress: event.address,
         txHash: event.transaction_hash || null,
         chainId: '10001', // Stellar chain ID from config
-        amountUnits: (event.amount * 1000000).toString(), // Convert to microunits
+        amountUnits: event.amount.toString(), // Amount is already in regular units
         tokenSymbol: this.getTokenSymbolFromTokenId(event.token_id),
         tokenAddress: '', // Not used for Aqua/Stellar chains
       },

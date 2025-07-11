@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { RequestResponseTransformer } from '../utils/transformation.js';
+import { RequestResponseTransformer } from '../utils/transformation';
 
 interface ApiError extends Error {
   statusCode?: number;

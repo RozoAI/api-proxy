@@ -7,7 +7,7 @@ The Payment API Proxy provides a unified interface for multiple blockchain payme
 ## Base URL
 
 ```
-Development: http://localhost:3001
+Development: http://localhost:3002
 Production: https://your-domain.com
 ```
 
@@ -42,13 +42,12 @@ Content-Type: application/json
 {
   display: {
     intent: string;           // Human-readable payment description
-    paymentValue: string;     // Payment amount in human-readable format
     currency: string;         // Currency code (e.g., "USD", "EUR")
   };
   destination: {
     destinationAddress: string;  // Recipient address
     chainId: string;            // Blockchain chain ID
-    amountUnits: string;        // Amount in smallest units (wei, stroops, etc.)
+    amountUnits: string;        // Amount in regular decimal units (e.g., "1.00" for $1.00)
     tokenSymbol?: string;       // Required for Aqua chains (XLM, USDC_XLM)
     tokenAddress?: string;      // Required for Daimo chains
   };
@@ -65,14 +64,13 @@ Content-Type: application/json
   createdAt: string;           // Creation timestamp
   display: {
     intent: string;
-    paymentValue: string;
     currency: string;
   };
   source: {                    // null until payment is initiated
     sourceAddress?: string;
     txHash?: string;
     chainId: string;
-    amountUnits: string;
+    amountUnits: string;        // Regular decimal units
     tokenSymbol: string;
     tokenAddress: string;
   } | null;
@@ -80,7 +78,7 @@ Content-Type: application/json
     destinationAddress: string;
     txHash: string | null;
     chainId: string;
-    amountUnits: string;
+    amountUnits: string;        // Regular decimal units
     tokenSymbol: string;
     tokenAddress: string;
   };
@@ -89,6 +87,13 @@ Content-Type: application/json
   url: string;                 // Payment URL for user interaction
 }
 ```
+
+#### Amount Units Format
+- **amountUnits**: Contains precise decimal amounts in regular units
+  - Examples: "1.00", "10.50", "0.01"
+  - **NOT** smallest units (wei, stroops, etc.)
+  - Must be a valid decimal string with appropriate precision for the token
+  - Providing more decimals than the underlying token supports will result in an error
 
 #### Payment Status Values
 - `payment_unpaid`: Payment created but not yet initiated
@@ -102,18 +107,17 @@ Content-Type: application/json
 
 #### Request
 ```bash
-curl -X POST http://localhost:3001/api/payment \
+curl -X POST http://localhost:3002/api/payment \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
       "intent": "Coffee purchase at Starbucks",
-      "paymentValue": "5.50",
       "currency": "USD"
     },
     "destination": {
       "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
       "chainId": "10",
-      "amountUnits": "5500000",
+      "amountUnits": "5.50",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
     "externalId": "starbucks_order_12345",
@@ -133,7 +137,6 @@ curl -X POST http://localhost:3001/api/payment \
   "createdAt": "1699123456789",
   "display": {
     "intent": "Coffee purchase at Starbucks",
-    "paymentValue": "5.50",
     "currency": "USD"
   },
   "source": null,
@@ -141,8 +144,8 @@ curl -X POST http://localhost:3001/api/payment \
     "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
     "txHash": null,
     "chainId": "10",
-    "amountUnits": "5500000",
-    "tokenSymbol": "ETH",
+    "amountUnits": "5.50",
+    "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "externalId": "starbucks_order_12345",
@@ -162,18 +165,17 @@ curl -X POST http://localhost:3001/api/payment \
 
 #### Request
 ```bash
-curl -X POST http://localhost:3001/api/payment \
+curl -X POST http://localhost:3002/api/payment \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
       "intent": "Stellar XLM transfer to friend",
-      "paymentValue": "25.00",
       "currency": "USD"
     },
     "destination": {
       "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
       "chainId": "10001",
-      "amountUnits": "25000000",
+      "amountUnits": "25.00",
       "tokenSymbol": "XLM"
     },
     "externalId": "friend_transfer_789",
@@ -192,7 +194,6 @@ curl -X POST http://localhost:3001/api/payment \
   "createdAt": "1699123456000",
   "display": {
     "intent": "Stellar XLM transfer to friend",
-    "paymentValue": "25.00",
     "currency": "USD"
   },
   "source": null,
@@ -200,7 +201,7 @@ curl -X POST http://localhost:3001/api/payment \
     "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     "txHash": null,
     "chainId": "10001",
-    "amountUnits": "25000000",
+    "amountUnits": "25.00",
     "tokenSymbol": "XLM",
     "tokenAddress": ""
   },
@@ -222,18 +223,17 @@ curl -X POST http://localhost:3001/api/payment \
 
 #### Request
 ```bash
-curl -X POST http://localhost:3001/api/payment \
+curl -X POST http://localhost:3002/api/payment \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
       "intent": "USDC payment for freelance work",
-      "paymentValue": "150.00",
       "currency": "USD"
     },
     "destination": {
       "destinationAddress": "GBQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKD",
       "chainId": "10001",
-      "amountUnits": "150000000",
+      "amountUnits": "150.00",
       "tokenSymbol": "USDC_XLM"
     },
     "externalId": "freelance_payment_456",
@@ -253,7 +253,6 @@ curl -X POST http://localhost:3001/api/payment \
   "createdAt": "1699123789000",
   "display": {
     "intent": "USDC payment for freelance work",
-    "paymentValue": "150.00",
     "currency": "USD"
   },
   "source": null,
@@ -261,7 +260,7 @@ curl -X POST http://localhost:3001/api/payment \
     "destinationAddress": "GBQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKD",
     "txHash": null,
     "chainId": "10001",
-    "amountUnits": "150000000",
+    "amountUnits": "150.00",
     "tokenSymbol": "USDC_XLM",
     "tokenAddress": ""
   },
@@ -312,7 +311,7 @@ GET /api/payment/:paymentId
 
 #### Request
 ```bash
-curl -X GET http://localhost:3001/api/payment/daimo_1699123456789_abc123def
+curl -X GET http://localhost:3002/api/payment/daimo_1699123456789_abc123def
 ```
 
 #### Response (Completed Payment)
@@ -323,23 +322,22 @@ curl -X GET http://localhost:3001/api/payment/daimo_1699123456789_abc123def
   "createdAt": "1699123456789",
   "display": {
     "intent": "Coffee purchase at Starbucks",
-    "paymentValue": "5.50",
     "currency": "USD"
   },
   "source": {
     "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
     "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
     "chainId": "10",
-    "amountUnits": "5500000",
-    "tokenSymbol": "ETH",
+    "amountUnits": "5.50",
+    "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "destination": {
     "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
     "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
     "chainId": "10",
-    "amountUnits": "5500000",
-    "tokenSymbol": "ETH",
+    "amountUnits": "5.50",
+    "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "externalId": "starbucks_order_12345",
@@ -359,7 +357,7 @@ curl -X GET http://localhost:3001/api/payment/daimo_1699123456789_abc123def
 
 #### Request
 ```bash
-curl -X GET http://localhost:3001/api/payment/aqua_invoice_1699123456_xyz789
+curl -X GET http://localhost:3002/api/payment/aqua_invoice_1699123456_xyz789
 ```
 
 #### Response (Completed Payment)
@@ -370,7 +368,6 @@ curl -X GET http://localhost:3001/api/payment/aqua_invoice_1699123456_xyz789
   "createdAt": "1699123456000",
   "display": {
     "intent": "Stellar XLM transfer to friend",
-    "paymentValue": "25.00",
     "currency": "USD"
   },
   "source": null,
@@ -378,7 +375,7 @@ curl -X GET http://localhost:3001/api/payment/aqua_invoice_1699123456_xyz789
     "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     "txHash": "stellar_tx_hash_abcdef123456789",
     "chainId": "10001",
-    "amountUnits": "25000000",
+    "amountUnits": "25.00",
     "tokenSymbol": "XLM",
     "tokenAddress": ""
   },
@@ -429,7 +426,7 @@ GET /api/payment/external-id/:externalId
 
 #### Request
 ```bash
-curl -X GET http://localhost:3001/api/payment/external-id/starbucks_order_12345
+curl -X GET http://localhost:3002/api/payment/external-id/starbucks_order_12345
 ```
 
 #### Response
@@ -440,23 +437,22 @@ curl -X GET http://localhost:3001/api/payment/external-id/starbucks_order_12345
   "createdAt": "1699123456789",
   "display": {
     "intent": "Coffee purchase at Starbucks",
-    "paymentValue": "5.50",
     "currency": "USD"
   },
   "source": {
     "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
     "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
     "chainId": "10",
-    "amountUnits": "5500000",
-    "tokenSymbol": "ETH",
+    "amountUnits": "5.50",
+    "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "destination": {
     "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
     "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
     "chainId": "10",
-    "amountUnits": "5500000",
-    "tokenSymbol": "ETH",
+    "amountUnits": "5.50",
+    "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "externalId": "starbucks_order_12345",
@@ -476,7 +472,7 @@ curl -X GET http://localhost:3001/api/payment/external-id/starbucks_order_12345
 
 #### Request
 ```bash
-curl -X GET http://localhost:3001/api/payment/external-id/friend_transfer_789
+curl -X GET http://localhost:3002/api/payment/external-id/friend_transfer_789
 ```
 
 #### Response
@@ -487,7 +483,6 @@ curl -X GET http://localhost:3001/api/payment/external-id/friend_transfer_789
   "createdAt": "1699123456000",
   "display": {
     "intent": "Stellar XLM transfer to friend",
-    "paymentValue": "25.00",
     "currency": "USD"
   },
   "source": null,
@@ -495,7 +490,7 @@ curl -X GET http://localhost:3001/api/payment/external-id/friend_transfer_789
     "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     "txHash": "stellar_tx_hash_abcdef123456789",
     "chainId": "10001",
-    "amountUnits": "25000000",
+    "amountUnits": "25.00",
     "tokenSymbol": "XLM",
     "tokenAddress": ""
   },
@@ -549,23 +544,22 @@ X-Daimo-Signature: sha256=<signature>
     "createdAt": "1699123456789",
     "display": {
       "intent": "Coffee purchase at Starbucks",
-      "paymentValue": "5.50",
       "currency": "USD"
     },
     "source": {
       "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
       "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
       "chainId": "10",
-      "amountUnits": "5500000",
-      "tokenSymbol": "ETH",
+      "amountUnits": "5.50",
+      "tokenSymbol": "USDC",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
     "destination": {
       "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
       "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
       "chainId": "10",
-      "amountUnits": "5500000",
-      "tokenSymbol": "ETH",
+      "amountUnits": "5.50",
+      "tokenSymbol": "USDC",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
     "externalId": "starbucks_order_12345",
@@ -612,7 +606,7 @@ Content-Type: application/json
 
 #### Request
 ```bash
-curl -X POST "http://localhost:3001/webhooks/aqua?token=secure-webhook-token-here" \
+curl -X POST "http://localhost:3002/webhooks/aqua?token=secure-webhook-token-here" \
   -H "Content-Type: application/json" \
   -d '{
     "invoice_id": "aqua_invoice_1699123456_xyz789",
@@ -622,7 +616,7 @@ curl -X POST "http://localhost:3001/webhooks/aqua?token=secure-webhook-token-her
     "created_at": "2023-11-04T12:30:56.000Z",
     "address": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     "amount": 25.00,
-    "callback_url": "http://localhost:3001/webhooks/aqua?token=secure-webhook-token-here",
+    "callback_url": "http://localhost:3002/webhooks/aqua?token=secure-webhook-token-here",
     "transaction_hash": "stellar_tx_hash_abcdef123456789",
     "token_id": "xlm",
     "metadata": {
@@ -670,7 +664,7 @@ GET /health
 
 #### Example Request
 ```bash
-curl -X GET http://localhost:3001/health
+curl -X GET http://localhost:3002/health
 ```
 
 #### Response
@@ -717,7 +711,7 @@ GET /api/providers/status
 
 #### Example Request
 ```bash
-curl -X GET http://localhost:3001/api/providers/status
+curl -X GET http://localhost:3002/api/providers/status
 ```
 
 #### Response
@@ -860,7 +854,7 @@ The API implements rate limiting to prevent abuse:
 ```typescript
 // Create payment
 const createPayment = async (paymentData: PaymentRequest) => {
-  const response = await fetch('http://localhost:3001/api/payment', {
+  const response = await fetch('http://localhost:3002/api/payment', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -877,7 +871,7 @@ const createPayment = async (paymentData: PaymentRequest) => {
 
 // Get payment
 const getPayment = async (paymentId: string) => {
-  const response = await fetch(`http://localhost:3001/api/payment/${paymentId}`);
+  const response = await fetch(`http://localhost:3002/api/payment/${paymentId}`);
   
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
@@ -890,13 +884,12 @@ const getPayment = async (paymentId: string) => {
 const daimoPayment = await createPayment({
   display: {
     intent: "Coffee purchase",
-    paymentValue: "5.50",
     currency: "USD"
   },
   destination: {
     destinationAddress: "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
     chainId: "10",
-    amountUnits: "5500000",
+    amountUnits: "5.50",
     tokenAddress: "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   externalId: "order_12345"
@@ -905,13 +898,12 @@ const daimoPayment = await createPayment({
 const aquaPayment = await createPayment({
   display: {
     intent: "Stellar transfer",
-    paymentValue: "25.00",
     currency: "USD"
   },
   destination: {
     destinationAddress: "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     chainId: "10001",
-    amountUnits: "25000000",
+    amountUnits: "25.00",
     tokenSymbol: "XLM"
   }
 });
@@ -925,7 +917,7 @@ import json
 
 def create_payment(payment_data):
     response = requests.post(
-        'http://localhost:3001/api/payment',
+        'http://localhost:3002/api/payment',
         headers={'Content-Type': 'application/json'},
         json=payment_data
     )
@@ -933,7 +925,7 @@ def create_payment(payment_data):
     return response.json()
 
 def get_payment(payment_id):
-    response = requests.get(f'http://localhost:3001/api/payment/{payment_id}')
+    response = requests.get(f'http://localhost:3002/api/payment/{payment_id}')
     response.raise_for_status()
     return response.json()
 
@@ -941,13 +933,12 @@ def get_payment(payment_id):
 daimo_payment = create_payment({
     "display": {
         "intent": "Coffee purchase",
-        "paymentValue": "5.50",
         "currency": "USD"
     },
     "destination": {
         "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
         "chainId": "10",
-        "amountUnits": "5500000",
+        "amountUnits": "5.50",
         "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
     "externalId": "order_12345"
@@ -956,13 +947,12 @@ daimo_payment = create_payment({
 aqua_payment = create_payment({
     "display": {
         "intent": "Stellar transfer",
-        "paymentValue": "25.00",
         "currency": "USD"
     },
     "destination": {
         "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
         "chainId": "10001",
-        "amountUnits": "25000000",
+        "amountUnits": "25.00",
         "tokenSymbol": "XLM"
     }
 })

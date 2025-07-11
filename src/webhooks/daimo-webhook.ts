@@ -3,8 +3,11 @@
  * Processes Daimo webhook events with signature verification
  */
 
-import { DaimoWebhookEvent } from '../types/webhook.js';
-import { PaymentService } from '../services/payment-service.js';
+import {
+  DaimoWebhookEvent,
+  WebhookValidationResult as _WebhookValidationResult,
+} from '../types/webhook';
+import { PaymentService } from '../services/payment-service';
 
 export class DaimoWebhook {
   private paymentService: PaymentService;

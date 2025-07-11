@@ -4,10 +4,10 @@
  */
 
 import express from 'express';
-import { AquaWebhookHandler } from './aqua-webhook.js';
-import { DaimoWebhook } from './daimo-webhook.js';
-import { PaymentService } from '../services/payment-service.js';
-import { AquaWebhookEvent, DaimoWebhookEvent } from '../types/webhook.js';
+import { AquaWebhookHandler } from './aqua-webhook';
+import { DaimoWebhook } from './daimo-webhook';
+import { PaymentService } from '../services/payment-service';
+import { AquaWebhookEvent, DaimoWebhookEvent } from '../types/webhook';
 
 interface AquaWebhookBody {
   invoice_id: string;

@@ -3,9 +3,9 @@
  * Transform between Daimo format and Aqua invoice format
  */
 
-import { PaymentRequest, PaymentResponse, PaymentStatus } from '../types/payment.js';
-import { AquaInvoiceRequest, AquaInvoiceResponse } from '../providers/aqua-api-client.js';
-import { CHAIN_IDS } from '../config/chains.js';
+import { PaymentRequest, PaymentResponse, PaymentStatus } from '../types/payment';
+import { AquaInvoiceRequest, AquaInvoiceResponse } from '../providers/aqua-api-client';
+import { CHAIN_IDS } from '../config/chains';
 
 /**
  * Transform Daimo PaymentRequest to Aqua invoice format
@@ -16,11 +16,8 @@ export function transformDaimoToAquaRequest(
 ): AquaInvoiceRequest {
   console.log('[AquaTransformation] Transforming Daimo request to Aqua format');
 
-  // Extract Stellar-specific data
-  const amountUnits = parseFloat(paymentRequest.destination.amountUnits);
-
-  // Convert microunits to regular units (Aqua expects regular amounts)
-  const amount = amountUnits / 1000000;
+  // Extract Stellar-specific data - amountUnits is already in regular units
+  const amount = parseFloat(paymentRequest.destination.amountUnits);
 
   // Map token symbol to Aqua token ID
   const tokenId = mapTokenSymbolToAquaTokenId(paymentRequest.destination.tokenSymbol);
@@ -68,9 +65,9 @@ export function transformAquaResponseToDaimo(
   // Map Aqua status to Daimo status
   const daimoStatus = mapAquaStatusToDaimo(aquaResponse.status);
 
-  // Convert regular amount back to microunits, handling possible undefineds
+  // Use the amount directly as regular units
   const amountValue = aquaResponse.amount ?? aquaRequest?.amount ?? 0;
-  const amountUnits = (amountValue * 1000000).toString();
+  const amountUnits = amountValue.toString();
 
   // Map Aqua token ID back to token symbol, handling possible undefineds
   const tokenSymbol = mapAquaTokenIdToTokenSymbol(aquaResponse?.token_id ?? aquaRequest?.token);
@@ -88,35 +85,37 @@ export function transformAquaResponseToDaimo(
   const daimoResponse: PaymentResponse = {
     id: aquaResponse.invoice_id,
     status: daimoStatus,
-    createdAt: new Date().getTime().toString(),
+    createdAt: aquaResponse.created_at,
     display: {
       intent: daimoIntent,
-      paymentValue: aquaResponse.amount?.toString() ?? aquaRequest?.amount.toString(),
       currency: daimoCurrency,
     },
-    source: null, // Will be populated when payment is completed
+    source: null, // Aqua doesn't provide source information in invoices
     destination: {
-      destinationAddress: aquaResponse.address ?? aquaRequest?.recipient,
-      txHash: null,
-      chainId: CHAIN_IDS.STELLAR.toString(), // Stellar chain ID
+      destinationAddress: aquaResponse.address,
+      txHash: aquaResponse.transaction_hash || null,
+      chainId: CHAIN_IDS.STELLAR.toString(),
       amountUnits: amountUnits,
       tokenSymbol: tokenSymbol,
-      tokenAddress: '', // Not used for Stellar/Aqua chains
+      tokenAddress: '', // Not used for Aqua/Stellar chains
     },
-    externalId: daimoExternalId || null,
+    externalId: daimoExternalId,
     metadata: {
       aqua_invoice_id: aquaResponse.invoice_id,
-      aqua_mode: aquaResponse.mode ?? aquaRequest?.mode,
+      aqua_mode: aquaResponse.mode,
+      aqua_status: aquaResponse.status,
+      aqua_callback_url: aquaResponse.callback_url,
+      transaction_hash: aquaResponse.transaction_hash,
+      token_id: aquaResponse.token_id,
+      cover_percent: aquaResponse.cover_percent,
+      cover_amount: aquaResponse.cover_amount,
+      cover_operator: aquaResponse.cover_operator,
+      original_metadata: aquaResponse.metadata,
     },
     url: aquaResponse.callback_url,
   };
 
-  console.log('[AquaTransformation] Transformed to Daimo format:', {
-    id: daimoResponse.id,
-    status: daimoResponse.status,
-    chainId: daimoResponse.destination.chainId,
-  });
-
+  console.log('[AquaTransformation] Transformed to Daimo format:', daimoResponse.id);
   return daimoResponse;
 }
 

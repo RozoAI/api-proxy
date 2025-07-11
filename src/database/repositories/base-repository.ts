@@ -3,11 +3,11 @@
  * Provides common database operations for all repositories
  */
 
-import { Pool, PoolConnection } from 'mysql2/promise';
-import { getDatabasePool } from '../connection.js';
+import mysql from 'mysql2/promise';
 import { randomUUID } from 'crypto';
+import { getDatabasePool } from '../connection';
 export abstract class BaseRepository {
-  protected pool: Pool;
+  protected pool: mysql.Pool;
 
   constructor() {
     this.pool = getDatabasePool();
@@ -39,7 +39,7 @@ export abstract class BaseRepository {
    * Execute within a transaction
    */
   protected async executeInTransaction<T>(
-    operation: (connection: PoolConnection) => Promise<T>
+    operation: (connection: mysql.PoolConnection) => Promise<T>
   ): Promise<T> {
     const connection = await this.pool.getConnection();
 

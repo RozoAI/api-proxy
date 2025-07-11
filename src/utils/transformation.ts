@@ -15,7 +15,6 @@ import {
 interface RequestInput {
   display?: {
     intent?: string;
-    paymentValue?: string;
     currency?: string;
   };
   destination?: {
@@ -35,7 +34,6 @@ interface ResponseInput {
   createdAt?: string;
   display?: {
     intent?: string;
-    paymentValue?: string;
     currency?: string;
   };
   source?: unknown;
@@ -98,7 +96,6 @@ export class RequestResponseTransformer {
     const sanitized: PaymentRequest = {
       display: {
         intent: this.sanitizeString(req.display?.intent, 'Payment'),
-        paymentValue: this.sanitizeString(req.display?.paymentValue, '0.00'),
         currency: this.sanitizeString(req.display?.currency, 'USD'),
       },
       destination: destination,
@@ -133,7 +130,6 @@ export class RequestResponseTransformer {
       createdAt: this.sanitizeString(response.createdAt, Math.floor(Date.now() / 1000).toString()),
       display: {
         intent: this.sanitizeString(response.display?.intent, 'Payment'),
-        paymentValue: this.sanitizeString(response.display?.paymentValue, '0.00'),
         currency: this.sanitizeString(response.display?.currency, 'USD'),
       },
       source: this.transformPaymentSource(response.source),
@@ -281,7 +277,6 @@ export class RequestResponseTransformer {
         errors.push('Display must be an object');
       } else {
         if (!req.display.intent) errors.push('Display intent is required');
-        if (!req.display.paymentValue) errors.push('Display paymentValue is required');
         if (!req.display.currency) errors.push('Display currency is required');
       }
     }

@@ -44,17 +44,16 @@ export abstract class BaseProvider implements PaymentProvider {
   validateRequest(paymentData: PaymentRequest): ValidationResult {
     const errors: string[] = [];
 
-    // Basic validation - can be extended by providers
-    if (!paymentData.display?.intent) {
-      errors.push('Display intent is required');
-    }
-
-    if (!paymentData.display?.paymentValue) {
-      errors.push('Payment value is required');
-    }
-
-    if (!paymentData.display?.currency) {
-      errors.push('Currency is required');
+    // Validate display object
+    if (!paymentData.display) {
+      errors.push('Display object is required');
+    } else {
+      if (!paymentData.display.intent) {
+        errors.push('Display intent is required');
+      }
+      if (!paymentData.display.currency) {
+        errors.push('Display currency is required');
+      }
     }
 
     if (!paymentData.destination?.destinationAddress) {

@@ -1,253 +1,199 @@
-# Create Payment API Interface
+# Create Payment API Documentation
+
+## Overview
+Creates a new payment request through the Payment API Proxy. The API automatically routes the request to the appropriate provider (Daimo or Aqua) based on the chain ID.
 
 ## Endpoint
-
-**POST** `/api/payment`
-
-## Description
-
-Creates a new payment request and routes it to the appropriate provider (Daimo Pay or Aqua) based on the blockchain chain ID specified in the request.
+```
+POST /api/payment
+```
 
 ## Request Format
 
+### Request Body Schema
 ```json
 {
   "display": {
     "intent": "string",
-    "paymentValue": "string",
     "currency": "string"
   },
   "destination": {
     "destinationAddress": "string",
-    "chainId": "string",
+    "chainId": "string", 
     "amountUnits": "string",
-    "tokenSymbol": "string (required for Aqua chains, optional for Daimo chains)",
-    "tokenAddress": "string (required for Daimo chains, optional for Aqua chains)"
+    "tokenSymbol": "string",
+    "tokenAddress": "string"
   },
-  "externalId": "string (optional)",
-  "metadata": "object (optional)"
+  "externalId": "string",
+  "metadata": {}
 }
 ```
 
-## Request Fields
+### Field Descriptions
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `display.intent` | string | Yes | Human-readable description of the payment |
-| `display.paymentValue` | string | Yes | Display value of the payment (e.g., "10.50") |
-| `display.currency` | string | Yes | Currency code (e.g., "USD", "XLM") |
-| `destination.destinationAddress` | string | Yes | Recipient's blockchain address |
+| `display.currency` | string | Yes | Currency code (e.g., "USD", "EUR") |
+| `destination.destinationAddress` | string | Yes | Recipient wallet address |
 | `destination.chainId` | string | Yes | Blockchain chain ID (determines provider routing) |
-| `destination.amountUnits` | string | Yes | Payment amount in smallest units (e.g., "1050000000" for 10.5 tokens) |
-| `destination.tokenSymbol` | string | Required for Aqua chains, optional for Daimo chains | Token symbol (e.g., "XLM", "USDC") |
-| `destination.tokenAddress` | string | Required for Daimo chains, optional for Aqua chains | Token contract address (empty string for native tokens) |
+| `destination.amountUnits` | string | Yes | Payment amount in regular decimal units (e.g., "10.50") |
+| `destination.tokenSymbol` | string | Conditional | Token symbol (required for Aqua/Stellar chains) |
+| `destination.tokenAddress` | string | Conditional | Token contract address (required for Daimo/EVM chains) |
 | `externalId` | string | No | External reference ID for tracking |
 | `metadata` | object | No | Additional metadata for the payment |
 
+### Amount Units Format
+- **Regular decimal units**: Use standard decimal notation (e.g., "1.00", "10.50", "0.01")
+- **Precision**: Must match the token's supported decimal places
+- **Examples**: 
+  - USDC: "10.50" (6 decimal places supported)
+  - ETH: "0.001" (18 decimal places supported)
+  - XLM: "25.00" (7 decimal places supported)
+
 ## Response Format
 
+### Success Response Schema
 ```json
 {
   "id": "string",
-  "status": "payment_unpaid|payment_started|payment_completed|payment_bounced",
-  "createdAt": "string (ISO 8601)",
+  "status": "string",
+  "createdAt": "string",
   "display": {
     "intent": "string",
-    "paymentValue": "string",
     "currency": "string"
   },
-  "source": {
-    "payerAddress": "string",
-    "txHash": "string",
-    "chainId": "string",
-    "amountUnits": "string",
-    "tokenSymbol": "string",
-    "tokenAddress": "string"
-  } | null,
+  "source": null,
   "destination": {
     "destinationAddress": "string",
-    "txHash": "string | null",
+    "txHash": null,
     "chainId": "string",
     "amountUnits": "string",
     "tokenSymbol": "string",
     "tokenAddress": "string"
   },
-  "externalId": "string (optional)",
-  "metadata": "object (optional)",
-  "url": "string (optional)"
+  "externalId": "string",
+  "metadata": {},
+  "url": "string"
 }
 ```
 
-## Response Fields
+### Response Field Descriptions
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Unique payment identifier |
-| `status` | string | Payment status (see status values below) |
-| `createdAt` | string | ISO 8601 timestamp of payment creation |
-| `display` | object | Display information (same as request) |
-| `source` | object/null | Source payment details (null if not yet paid) |
-| `source.payerAddress` | string | Payer's blockchain address |
-| `source.txHash` | string | Source transaction hash |
-| `source.chainId` | string | Source chain ID |
-| `source.amountUnits` | string | Source amount in smallest units |
-| `source.tokenSymbol` | string | Source token symbol |
-| `source.tokenAddress` | string | Source token address |
+| `status` | string | Payment status (payment_unpaid, payment_started, payment_completed, payment_bounced) |
+| `createdAt` | string | Payment creation timestamp |
+| `display.intent` | string | Human-readable payment description |
+| `display.currency` | string | Payment currency |
+| `source` | object\|null | Source payment details (null until payment initiated) |
+| `source.amountUnits` | string | Source amount in regular decimal units |
 | `destination` | object | Destination payment details |
-| `destination.destinationAddress` | string | Recipient's address |
-| `destination.txHash` | string/null | Destination transaction hash (null if not yet processed) |
-| `destination.chainId` | string | Destination chain ID |
-| `destination.amountUnits` | string | Destination amount in smallest units |
-| `destination.tokenSymbol` | string | Destination token symbol |
-| `destination.tokenAddress` | string | Destination token address |
-| `externalId` | string | External reference ID (if provided) |
-| `metadata` | object | Additional metadata (if provided) |
-| `url` | string | Payment URL for user interaction (if available) |
+| `destination.amountUnits` | string | Destination amount in regular decimal units |
+| `destination.txHash` | string\|null | Transaction hash (null until completed) |
+| `externalId` | string\|null | External reference ID |
+| `metadata` | object | Payment metadata |
+| `url` | string | Payment URL for user interaction |
 
-## Payment Status Values
+## Examples
 
-- `payment_unpaid`: Payment created but not yet initiated
-- `payment_started`: Payment has been initiated but not completed
-- `payment_completed`: Payment has been successfully completed
-- `payment_bounced`: Payment failed or was rejected
+### Example 1: Ethereum USDC Payment (Daimo Provider)
 
-## Chain ID Routing
-
-The system automatically routes requests to providers based on chain IDs:
-
-### Daimo Provider
-- Chain ID 1: Ethereum Mainnet
-- Chain ID 10: Optimism
-- Chain ID 137: Polygon
-- Chain ID 42161: Arbitrum One
-
-### Aqua Provider
-- Chain ID 10001: Stellar (XLM and USDC_XLM tokens)
-
-## Token Field Requirements
-
-The `tokenSymbol` and `tokenAddress` fields have different requirements based on the chain type:
-
-### For Aqua Chains (Chain ID 10001)
-- **`tokenSymbol`**: Required - Must specify the token symbol (e.g., "XLM", "USDC_XLM")
-- **`tokenAddress`**: Optional - Can be omitted or set to empty string
-
-### For Daimo Chains (Chain IDs 1, 10, 137, 42161)
-- **`tokenSymbol`**: Optional - Can be omitted for native tokens
-- **`tokenAddress`**: Required - Must specify the token contract address (use empty string for native tokens like ETH)
-
-## Example Requests
-
-### Aqua Chain Example (Stellar XLM)
-```json
-{
-  "display": {
-    "intent": "Payment for coffee",
-    "paymentValue": "5.00",
-    "currency": "USD"
-  },
-  "destination": {
-    "destinationAddress": "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "chainId": "10001",
-    "amountUnits": "5000000000",
-    "tokenSymbol": "XLM"
-  },
-  "externalId": "order_12345",
-  "metadata": {
-    "orderId": "12345",
-    "customerId": "user_789"
-  }
-}
+#### Request
+```bash
+curl -X POST http://localhost:3002/api/payment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {
+      "intent": "Coffee purchase",
+      "currency": "USD"
+    },
+    "destination": {
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+      "chainId": "10",
+      "amountUnits": "5.00",
+      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    },
+    "externalId": "coffee_order_123"
+  }'
 ```
 
-### Daimo Chain Example (Ethereum USDC)
+#### Response
 ```json
 {
+  "id": "daimo_1699123456789_abc123def",
+  "status": "payment_unpaid", 
+  "createdAt": "1699123456789",
   "display": {
-    "intent": "Payment for coffee",
-    "paymentValue": "5.00",
-    "currency": "USD"
-  },
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "chainId": "1",
-    "amountUnits": "5000000",
-    "tokenAddress": "0xA0b86a33E6441b8C4C8C8C8C8C8C8C8C8C8C8C8C8"
-  },
-  "externalId": "order_12346",
-  "metadata": {
-    "orderId": "12346",
-    "customerId": "user_789"
-  }
-}
-```
-
-## Example Response
-
-```json
-{
-  "id": "pay_1234567890abcdef",
-  "status": "payment_unpaid",
-  "createdAt": "2024-01-15T10:30:00.000Z",
-  "display": {
-    "intent": "Payment for coffee",
-    "paymentValue": "5.00",
+    "intent": "Coffee purchase",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
     "txHash": null,
-    "chainId": "10001",
-    "amountUnits": "5000000000",
-    "tokenSymbol": "XLM",
-    "tokenAddress": ""
+    "chainId": "10",
+    "amountUnits": "5.00",
+    "tokenSymbol": "USDC",
+    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
-  "externalId": "order_12345",
+  "externalId": "coffee_order_123",
   "metadata": {
-    "orderId": "12345",
-    "customerId": "user_789"
+    "provider": "daimo"
   },
-  "url": "https://aqua.com/pay/pay_1234567890abcdef"
+  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
 }
 ```
 
-## Error Response Format
+---
 
-```json
-{
-  "error": "error_code",
-  "message": "Human-readable error message",
-  "details": "Additional error details (optional)"
-}
-```
+### Example 2: Stellar XLM Payment (Aqua Provider)
 
-## Common Error Codes
-
-| Code | Description | HTTP Status |
-|------|-------------|-------------|
-| `invalid_request` | Invalid request structure | 400 |
-| `invalid_chain_id` | Invalid or unsupported chain ID | 400 |
-| `provider_unavailable` | No provider available for the chain | 400 |
-| `provider_error` | Provider-specific error | 400 |
-| `validation_error` | Request validation failed | 400 |
-
-## cURL Example
-
+#### Request
 ```bash
-curl -X POST http://localhost:3000/api/payment \
+curl -X POST http://localhost:3002/api/payment \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
-      "intent": "Test payment",
-      "paymentValue": "1.00",
+      "intent": "Stellar transfer",
       "currency": "USD"
     },
     "destination": {
-      "destinationAddress": "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
       "chainId": "10001",
-      "amountUnits": "1000000000",
+      "amountUnits": "1.00",
       "tokenSymbol": "XLM"
-    }
+    },
+    "externalId": "stellar_transfer_456"
   }'
+```
+
+#### Response
+```json
+{
+  "id": "aqua_invoice_1699123456_xyz789",
+  "status": "payment_unpaid",
+  "createdAt": "1699123456000",
+  "display": {
+    "intent": "Stellar transfer",
+    "currency": "USD"
+  },
+  "source": null,
+  "destination": {
+    "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
+    "txHash": null,
+    "chainId": "10001",
+    "amountUnits": "1.00",
+    "tokenSymbol": "XLM",
+    "tokenAddress": ""
+  },
+  "externalId": "stellar_transfer_456",
+  "metadata": {
+    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789",
+    "aqua_mode": "default",
+    "aqua_token_id": "xlm"
+  },
+  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
+}
 ``` 
