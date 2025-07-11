@@ -29,7 +29,7 @@ function getDatabaseConfig(): DatabaseConfig {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'api_proxy',
-    connectionLimit:  parseInt(process.env.DB_CONNECTION_LIMIT || '10') // Max 10 connections as per plan
+    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10'), // Max 10 connections as per plan
   };
 }
 
@@ -42,14 +42,14 @@ export function initializeDatabase(): Pool {
   }
 
   const config = getDatabaseConfig();
-  
+
   pool = mysql.createPool({
     host: config.host,
     port: config.port,
     user: config.user,
     password: config.password,
     database: config.database,
-    connectionLimit: config.connectionLimit
+    connectionLimit: config.connectionLimit,
   });
 
   console.log(`Database pool initialized with ${config.connectionLimit} max connections`);
@@ -63,7 +63,7 @@ export async function getDatabaseConnection(): Promise<PoolConnection> {
   if (!pool) {
     initializeDatabase();
   }
-  
+
   return await pool!.getConnection();
 }
 
@@ -74,7 +74,7 @@ export function getDatabasePool(): Pool {
   if (!pool) {
     initializeDatabase();
   }
-  
+
   return pool!;
 }
 
@@ -84,11 +84,11 @@ export function getDatabasePool(): Pool {
 export async function checkDatabaseHealth(): Promise<boolean> {
   try {
     const connection = await getDatabaseConnection();
-    
+
     // Simple query to test connection
     await connection.execute('SELECT 1');
     connection.release();
-    
+
     return true;
   } catch (error) {
     console.error('Database health check failed:', error);
@@ -105,4 +105,4 @@ export async function closeDatabasePool(): Promise<void> {
     pool = null;
     console.log('Database pool closed');
   }
-} 
+}

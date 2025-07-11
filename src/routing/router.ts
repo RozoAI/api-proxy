@@ -23,7 +23,7 @@ export class PaymentRouter {
 
     // Validate and sanitize the request
     const sanitizedRequest = RequestResponseTransformer.validateAndSanitizeRequest(paymentData);
-    
+
     // Validate request structure
     const validation = RequestResponseTransformer.validateRequestStructure(sanitizedRequest);
     if (!validation.isValid) {
@@ -53,13 +53,15 @@ export class PaymentRouter {
 
       // Execute the payment request
       const response = await provider.createPayment(sanitizedRequest);
-      
+
       // Transform response to ensure Daimo Pay format
-      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(response, provider.name);
-      
+      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(
+        response,
+        provider.name
+      );
+
       console.log(`[Router] Successfully processed payment with ${provider.name}`);
       return transformedResponse;
-
     } catch (error) {
       console.error(`[Router] Error processing payment with ${provider.name}:`, error);
       throw error;
@@ -90,11 +92,13 @@ export class PaymentRouter {
 
     try {
       const response = await provider.getPayment(paymentId);
-      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(response, provider.name);
-      
+      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(
+        response,
+        provider.name
+      );
+
       console.log(`[Router] Successfully retrieved payment with ${provider.name}`);
       return transformedResponse;
-
     } catch (error) {
       console.error(`[Router] Error retrieving payment with ${provider.name}:`, error);
       throw error;
@@ -104,7 +108,10 @@ export class PaymentRouter {
   /**
    * Get payment by external ID from the appropriate provider
    */
-  async routeGetPaymentByExternalId(externalId: string, chainId?: number): Promise<PaymentResponse> {
+  async routeGetPaymentByExternalId(
+    externalId: string,
+    chainId?: number
+  ): Promise<PaymentResponse> {
     console.log(`[Router] Routing get payment by external ID request: ${externalId}`);
 
     let provider: PaymentProvider | null = null;
@@ -125,11 +132,13 @@ export class PaymentRouter {
 
     try {
       const response = await provider.getPaymentByExternalId(externalId);
-      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(response, provider.name);
-      
+      const transformedResponse = RequestResponseTransformer.transformToDaimoFormat(
+        response,
+        provider.name
+      );
+
       console.log(`[Router] Successfully retrieved payment with ${provider.name}`);
       return transformedResponse;
-
     } catch (error) {
       console.error(`[Router] Error retrieving payment with ${provider.name}:`, error);
       throw error;
@@ -142,7 +151,7 @@ export class PaymentRouter {
   private async selectProvider(chainId: number): Promise<PaymentProvider | null> {
     // First try to get the specific provider for this chain
     const provider = this.registry.getProviderForChain(chainId);
-    
+
     if (provider) {
       return provider;
     }
@@ -157,8 +166,6 @@ export class PaymentRouter {
     return null;
   }
 
-
-
   /**
    * Determine provider from payment ID format
    */
@@ -167,7 +174,7 @@ export class PaymentRouter {
     if (paymentId.startsWith('aqua_')) {
       return this.registry.getProviderByName('aqua');
     }
-    
+
     // Default to Daimo for other formats
     return this.registry.getProviderByName('daimo');
   }
@@ -177,7 +184,7 @@ export class PaymentRouter {
    */
   private async findProviderWithExternalId(externalId: string): Promise<PaymentProvider | null> {
     const providers = this.registry.getAllProviders();
-    
+
     for (const provider of providers) {
       try {
         // Try to get payment by external ID with each provider
@@ -188,19 +195,19 @@ export class PaymentRouter {
         continue;
       }
     }
-    
+
     return null;
   }
 
   /**
    * Get routing statistics
    */
-  getRoutingStats(): any {
+  getRoutingStats(): unknown {
     const stats = this.registry.getStats();
     return {
       ...stats,
       routingEngine: 'PaymentRouter',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
-} 
+}

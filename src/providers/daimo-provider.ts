@@ -3,15 +3,23 @@
  * Implements the Daimo Pay API exactly as specified
  */
 
-import { BaseProvider } from './base-provider';
-import { PaymentRequest, PaymentResponse, ValidationResult } from '../types/payment';
-import { ProviderConfig } from '../types/provider';
-import { getChainsByProvider } from '../config/chains';
+import { BaseProvider } from './base-provider.js';
+import {
+  PaymentRequest,
+  PaymentResponse,
+  PaymentSource,
+  PaymentResponseDestination,
+  PaymentStatus,
+  ValidationResult,
+} from '../types/payment.js';
+import { ProviderConfig } from '../types/provider.js';
+import { ChainConfig, getChainsByProvider } from '../config/chains.js';
+import { getChainConfig } from '../config/chains';
 
 export class DaimoProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
     // Get all chains configured for Daimo
-    const daimoChains = getChainsByProvider('daimo').map(chain => chain.chainId);
+    const daimoChains = getChainsByProvider('daimo').map((chain) => chain.chainId);
     super(config, daimoChains);
   }
 
@@ -22,7 +30,7 @@ export class DaimoProvider extends BaseProvider {
       method: 'POST',
       headers: this.getDefaultHeaders(),
       body: JSON.stringify(paymentData),
-      signal: AbortSignal.timeout(this.config.timeout)
+      signal: AbortSignal.timeout(this.config.timeout),
     });
 
     if (!response.ok) {
@@ -47,7 +55,7 @@ export class DaimoProvider extends BaseProvider {
     const response = await fetch(`${this.config.baseUrl}/api/payment/${paymentId}`, {
       method: 'GET',
       headers: this.getDefaultHeaders(),
-      signal: AbortSignal.timeout(this.config.timeout)
+      signal: AbortSignal.timeout(this.config.timeout),
     });
 
     if (!response.ok) {
@@ -71,7 +79,7 @@ export class DaimoProvider extends BaseProvider {
     const response = await fetch(`${this.config.baseUrl}/api/payment/external-id/${externalId}`, {
       method: 'GET',
       headers: this.getDefaultHeaders(),
-      signal: AbortSignal.timeout(this.config.timeout)
+      signal: AbortSignal.timeout(this.config.timeout),
     });
 
     if (!response.ok) {
@@ -108,33 +116,36 @@ export class DaimoProvider extends BaseProvider {
       errors.push(`Chain ID ${chainId} is not supported by Daimo provider`);
     }
 
-    // Validate token symbol is supported for the chain
+    // Validate token exists for this chain
     const chainConfig = this.getChainConfig(chainId);
-    if (chainConfig && chainConfig.tokens) {
-      if (!chainConfig.tokens.includes(paymentData.destination.tokenSymbol)) {
-        errors.push(`Token ${paymentData.destination.tokenSymbol} is not supported on chain ${chainId}`);
-      }
+    if (
+      chainConfig &&
+      chainConfig.tokens &&
+      paymentData.destination.tokenSymbol &&
+      !chainConfig.tokens.includes(paymentData.destination.tokenSymbol)
+    ) {
+      errors.push(`Token ${paymentData.destination.tokenSymbol} not supported on chain ${chainId}`);
     }
 
     return {
       isValid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
   override async isHealthy(): Promise<boolean> {
     try {
       const startTime = Date.now();
-      
+
       // Daimo-specific health check
       const response = await fetch(`${this.config.baseUrl}/health`, {
         method: 'GET',
         headers: this.getDefaultHeaders(),
-        signal: AbortSignal.timeout(5000) // Shorter timeout for health check
+        signal: AbortSignal.timeout(5000), // Shorter timeout for health check
       });
 
       const responseTime = Date.now() - startTime;
-      
+
       if (!response.ok) {
         console.error(`[${this.name}] Health check failed with status ${response.status}`);
         return false;
@@ -148,34 +159,97 @@ export class DaimoProvider extends BaseProvider {
     }
   }
 
-  private transformDaimoResponse(responseData: any): PaymentResponse {
-    // Daimo response is already in the correct format, just ensure all required fields
+  private transformDaimoResponse(responseData: unknown): PaymentResponse {
+    if (!responseData || typeof responseData !== 'object') {
+      throw new Error('Invalid response data from Daimo provider');
+    }
+
+    const response = responseData as Record<string, unknown>;
+
     return {
-      id: responseData.id,
-      status: responseData.status,
-      createdAt: responseData.createdAt,
-      display: responseData.display,
-      source: responseData.source,
-      destination: responseData.destination,
-      externalId: responseData.externalId,
-      metadata: responseData.metadata,
-      url: responseData.url
+      id: typeof response.id === 'string' ? response.id : '',
+      status:
+        typeof response.status === 'string' ? (response.status as PaymentStatus) : 'payment_unpaid',
+      createdAt:
+        typeof response.createdAt === 'string' ? response.createdAt : Date.now().toString(),
+      display: this.extractDisplay(response.display),
+      source: this.extractSource(response.source),
+      destination: this.extractDestination(response.destination),
+      externalId: typeof response.externalId === 'string' ? response.externalId : undefined,
+      metadata:
+        response.metadata && typeof response.metadata === 'object' ? response.metadata : undefined,
+      url: typeof response.url === 'string' ? response.url : undefined,
     };
   }
 
-  private getChainConfig(chainId: number) {
-    const { getChainConfig } = require('../config/chains');
+  private extractDisplay(display: unknown): {
+    intent: string;
+    paymentValue: string;
+    currency: string;
+  } {
+    if (!display || typeof display !== 'object') {
+      return { intent: 'Payment', paymentValue: '0.00', currency: 'USD' };
+    }
+
+    const d = display as Record<string, unknown>;
+    return {
+      intent: typeof d.intent === 'string' ? d.intent : 'Payment',
+      paymentValue: typeof d.paymentValue === 'string' ? d.paymentValue : '0.00',
+      currency: typeof d.currency === 'string' ? d.currency : 'USD',
+    };
+  }
+
+  private extractSource(source: unknown): PaymentSource | null {
+    if (!source || typeof source !== 'object') {
+      return null;
+    }
+
+    const s = source as Record<string, unknown>;
+    return {
+      payerAddress: typeof s.payerAddress === 'string' ? s.payerAddress : '',
+      txHash: typeof s.txHash === 'string' ? s.txHash : '',
+      chainId: typeof s.chainId === 'string' ? s.chainId : '',
+      amountUnits: typeof s.amountUnits === 'string' ? s.amountUnits : '0',
+      tokenSymbol: typeof s.tokenSymbol === 'string' ? s.tokenSymbol : '',
+      tokenAddress: typeof s.tokenAddress === 'string' ? s.tokenAddress : '',
+    };
+  }
+
+  private extractDestination(destination: unknown): PaymentResponseDestination {
+    if (!destination || typeof destination !== 'object') {
+      return {
+        destinationAddress: '',
+        txHash: null,
+        chainId: '',
+        amountUnits: '0',
+        tokenSymbol: '',
+        tokenAddress: '',
+      };
+    }
+
+    const d = destination as Record<string, unknown>;
+    return {
+      destinationAddress: typeof d.destinationAddress === 'string' ? d.destinationAddress : '',
+      txHash: typeof d.txHash === 'string' ? d.txHash : null,
+      chainId: typeof d.chainId === 'string' ? d.chainId : '',
+      amountUnits: typeof d.amountUnits === 'string' ? d.amountUnits : '0',
+      tokenSymbol: typeof d.tokenSymbol === 'string' ? d.tokenSymbol : '',
+      tokenAddress: typeof d.tokenAddress === 'string' ? d.tokenAddress : '',
+    };
+  }
+
+  private getChainConfig(chainId: number): ChainConfig | undefined {
     return getChainConfig(chainId);
   }
 
   protected override getDefaultHeaders(): Record<string, string> {
     const headers = super.getDefaultHeaders();
-    
+
     // Daimo requires Api-Key header
     if (this.config.apiKey) {
       headers['Api-Key'] = this.config.apiKey;
     }
-    
+
     return headers;
   }
-} 
+}

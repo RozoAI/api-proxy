@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "API proxy server that forwards requests and logs them",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "build": "npx tsc",
     "start": "node dist/server.js",
@@ -10,7 +11,11 @@
     "dev:env": "ts-node-dev --respawn --transpile-only --env-file env.dev src/server.ts",
     "dev:watch": "tsc --watch",
     "clean": "rm -rf dist",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "lint:fix": "eslint \"src/**/*.ts\" --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
   },
   "dependencies": {
     "axios": "^1.10.0",
@@ -20,14 +25,21 @@
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
-    "typescript": "^5.8.3",
-    "mysql2": "^3.14.2"
+    "mysql2": "^3.14.2",
+    "typescript": "^5.5.0"
   },
   "devDependencies": {
+    "@eslint/js": "^8.56.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.0.13",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0"
   },

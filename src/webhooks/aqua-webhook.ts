@@ -3,12 +3,12 @@
  * Processes Aqua webhook events with token-based authentication
  */
 
-import { 
-  AquaWebhookEvent, 
-  WebhookHandler, 
-  WebhookValidationResult, 
+import {
+  AquaWebhookEvent,
+  WebhookHandler,
+  WebhookValidationResult,
   WebhookResponse,
-  WebhookProcessingContext
+  WebhookProcessingContext,
 } from '../types/webhook';
 import { PaymentService } from '../services/payment-service';
 import { PaymentResponse, PaymentStatus } from '../types/payment';
@@ -26,7 +26,11 @@ export class AquaWebhookHandler implements WebhookHandler {
   /**
    * Validate Aqua webhook with token-based authentication
    */
-  validateWebhook(headers: Record<string, string>, body: any, query?: Record<string, string>): WebhookValidationResult {
+  validateWebhook(
+    headers: Record<string, string>,
+    body: unknown,
+    query?: Record<string, string>
+  ): WebhookValidationResult {
     const errors: string[] = [];
 
     try {
@@ -42,43 +46,50 @@ export class AquaWebhookHandler implements WebhookHandler {
         return { isValid: false, errors };
       }
 
+      // Type check the body
+      if (!body || typeof body !== 'object') {
+        errors.push('Invalid request body');
+        return { isValid: false, errors };
+      }
+
+      const typedBody = body as Record<string, unknown>;
+
       // Validate event structure based on aqua.md
-      if (!body.invoice_id) {
+      if (!typedBody.invoice_id) {
         errors.push('Missing invoice_id');
       }
 
-      if (!body.status) {
+      if (!typedBody.status) {
         errors.push('Missing status');
       }
 
-      if (!body.amount) {
+      if (!typedBody.amount) {
         errors.push('Missing amount');
       }
 
-      if (!body.address) {
+      if (!typedBody.address) {
         errors.push('Missing address');
       }
 
-      if (!body.token_id) {
+      if (!typedBody.token_id) {
         errors.push('Missing token_id');
       }
 
       // Validate status values
       const validStatuses = ['failed', 'paid', 'created', 'retry', 'deleted'];
-      if (body.status && !validStatuses.includes(body.status)) {
-        errors.push(`Invalid status: ${body.status}`);
+      if (typedBody.status && !validStatuses.includes(typedBody.status as string)) {
+        errors.push(`Invalid status: ${typedBody.status}`);
       }
 
       // Validate mode if present
-      if (body.mode && !['default', 'web3'].includes(body.mode)) {
-        errors.push(`Invalid mode: ${body.mode}`);
+      if (typedBody.mode && !['default', 'web3'].includes(typedBody.mode as string)) {
+        errors.push(`Invalid mode: ${typedBody.mode}`);
       }
 
       return {
         isValid: errors.length === 0,
-        errors
+        errors,
       };
-
     } catch (error) {
       console.error('[AquaWebhook] Validation error:', error);
       errors.push('Webhook validation failed');
@@ -91,19 +102,21 @@ export class AquaWebhookHandler implements WebhookHandler {
    */
   async processWebhook(event: AquaWebhookEvent): Promise<WebhookResponse> {
     try {
-      console.log(`[AquaWebhook] Processing status update for invoice ${event.invoice_id}: ${event.status}`);
+      console.log(
+        `[AquaWebhook] Processing status update for invoice ${event.invoice_id}: ${event.status}`
+      );
 
       // Map Aqua statuses to internal payment statuses
       const internalStatus = this.mapAquaStatusToInternal(event.status);
-      
+
       // Create PaymentResponse object from Aqua event using transformation utility
       const paymentResponse = transformAquaResponseToDaimo(event);
-      
+
       // Try to find payment by external ID (invoice_id)
       // Since Aqua uses invoice_id as the external identifier
       try {
         const existingPayment = await this.paymentService.getPaymentByExternalId(event.invoice_id);
-        
+
         if (existingPayment) {
           // Update existing payment
           const updated = await this.paymentService.updatePaymentStatus(
@@ -113,41 +126,44 @@ export class AquaWebhookHandler implements WebhookHandler {
           );
 
           if (updated) {
-            console.log(`[AquaWebhook] Successfully updated payment ${existingPayment.id} to status ${internalStatus}`);
+            console.log(
+              `[AquaWebhook] Successfully updated payment ${existingPayment.id} to status ${internalStatus}`
+            );
             return {
               success: true,
-              message: `Payment ${existingPayment.id} updated to ${internalStatus}`
+              message: `Payment ${existingPayment.id} updated to ${internalStatus}`,
             };
           } else {
             console.warn(`[AquaWebhook] Failed to update payment ${existingPayment.id}`);
             return {
               success: false,
-              error: `Failed to update payment ${existingPayment.id}`
+              error: `Failed to update payment ${existingPayment.id}`,
             };
           }
         } else {
           // Payment not found in database
-          console.warn(`[AquaWebhook] Payment with external ID ${event.invoice_id} not found in database`);
+          console.warn(
+            `[AquaWebhook] Payment with external ID ${event.invoice_id} not found in database`
+          );
           return {
             success: false,
-            error: `Payment with external ID ${event.invoice_id} not found`
+            error: `Payment with external ID ${event.invoice_id} not found`,
           };
         }
       } catch (error) {
         console.error(`[AquaWebhook] Error finding payment by external ID:`, error);
         return {
           success: false,
-          error: `Error finding payment: ${error instanceof Error ? error.message : 'Unknown error'}`
+          error: `Error finding payment: ${error instanceof Error ? error.message : 'Unknown error'}`,
         };
       }
-
     } catch (error) {
       console.error(`[AquaWebhook] Error processing webhook:`, error);
       console.error(`[AquaWebhook] Full webhook payload:`, JSON.stringify(event, null, 2));
-      
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -191,7 +207,7 @@ export class AquaWebhookHandler implements WebhookHandler {
       display: {
         intent: `Aqua Invoice ${event.invoice_id}`,
         paymentValue: event.amount.toString(),
-        currency: 'USD' // Default currency, could be enhanced based on token_id
+        currency: 'USD', // Default currency, could be enhanced based on token_id
       },
       source: null,
       destination: {
@@ -200,7 +216,7 @@ export class AquaWebhookHandler implements WebhookHandler {
         chainId: '10001', // Stellar chain ID from config
         amountUnits: (event.amount * 1000000).toString(), // Convert to microunits
         tokenSymbol: this.getTokenSymbolFromTokenId(event.token_id),
-        tokenAddress: '' // Not used for Aqua/Stellar chains
+        tokenAddress: '', // Not used for Aqua/Stellar chains
       },
       externalId: event.invoice_id,
       metadata: {
@@ -210,9 +226,9 @@ export class AquaWebhookHandler implements WebhookHandler {
         cover_percent: event.cover_percent,
         cover_amount: event.cover_amount,
         cover_operator: event.cover_operator,
-        original_metadata: event.metadata
+        original_metadata: event.metadata,
       },
-      url: event.callback_url
+      url: event.callback_url,
     };
   }
 
@@ -248,7 +264,7 @@ export class AquaWebhookHandler implements WebhookHandler {
       externalId: event.invoice_id,
       timestamp: new Date(),
       headers,
-      query
+      query,
     };
   }
-} 
+}

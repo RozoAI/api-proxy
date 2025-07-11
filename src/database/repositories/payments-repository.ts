@@ -24,7 +24,6 @@ export interface PaymentRecord {
 }
 
 export class PaymentsRepository extends BaseRepository {
-  
   /**
    * Create a new payment record
    */
@@ -35,14 +34,14 @@ export class PaymentsRepository extends BaseRepository {
   ): Promise<PaymentRecord> {
     const id = this.generateId();
     const now = new Date();
-    
+
     const query = `
       INSERT INTO payments (
         id, amount, currency, status, external_id, provider_name, chain_id,
         created_at, updated_at, status_updated_at, provider_response, metadata, original_request
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    
+
     const params = [
       id,
       paymentRequest.destination.amountUnits,
@@ -56,13 +55,13 @@ export class PaymentsRepository extends BaseRepository {
       now,
       JSON.stringify(paymentResponse),
       paymentRequest.metadata ? JSON.stringify(paymentRequest.metadata) : null,
-      JSON.stringify(paymentRequest)
+      JSON.stringify(paymentRequest),
     ];
-    
+
     await this.execute(query, params);
-    
+
     // Return the created record
-    return await this.getPaymentById(id) as PaymentRecord;
+    return (await this.getPaymentById(id)) as PaymentRecord;
   }
 
   /**
@@ -77,9 +76,9 @@ export class PaymentsRepository extends BaseRepository {
       FROM payments 
       WHERE id = ?
     `;
-    
+
     const result = await this.executeOne<PaymentRecord>(query, [id]);
-    
+
     if (result) {
       // Parse JSON fields
       if (result.providerResponse) {
@@ -92,7 +91,7 @@ export class PaymentsRepository extends BaseRepository {
         result.originalRequest = JSON.parse(result.originalRequest as string);
       }
     }
-    
+
     return result;
   }
 
@@ -108,9 +107,9 @@ export class PaymentsRepository extends BaseRepository {
       FROM payments 
       WHERE external_id = ?
     `;
-    
+
     const result = await this.executeOne<PaymentRecord>(query, [externalId]);
-    
+
     if (result) {
       // Parse JSON fields
       if (result.providerResponse) {
@@ -123,7 +122,7 @@ export class PaymentsRepository extends BaseRepository {
         result.originalRequest = JSON.parse(result.originalRequest as string);
       }
     }
-    
+
     return result;
   }
 
@@ -140,16 +139,10 @@ export class PaymentsRepository extends BaseRepository {
       SET status = ?, provider_response = ?, status_updated_at = ?, updated_at = ?
       WHERE id = ?
     `;
-    
+
     const now = new Date();
-    const params = [
-      status,
-      JSON.stringify(providerResponse),
-      now,
-      now,
-      id
-    ];
-    
+    const params = [status, JSON.stringify(providerResponse), now, now, id];
+
     const [result] = await this.execute(query, params);
     return (result as any).affectedRows > 0;
   }
@@ -157,10 +150,7 @@ export class PaymentsRepository extends BaseRepository {
   /**
    * Get payments by status, optionally filtering by age
    */
-  async getPaymentsByStatus(
-    status: string,
-    olderThanMinutes?: number
-  ): Promise<PaymentRecord[]> {
+  async getPaymentsByStatus(status: string, olderThanMinutes?: number): Promise<PaymentRecord[]> {
     let query = `
       SELECT id, amount, currency, status, external_id as externalId, provider_name as providerName,
              chain_id as chainId, created_at as createdAt, updated_at as updatedAt,
@@ -169,20 +159,20 @@ export class PaymentsRepository extends BaseRepository {
       FROM payments 
       WHERE status = ?
     `;
-    
+
     const params: any[] = [status];
-    
+
     if (olderThanMinutes) {
       query += ` AND status_updated_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)`;
       params.push(olderThanMinutes);
     }
-    
+
     query += ` ORDER BY created_at DESC`;
-    
+
     const [rows] = await this.execute<PaymentRecord>(query, params);
-    
+
     // Parse JSON fields for each row
-    return rows.map(row => {
+    return rows.map((row) => {
       if (row.providerResponse) {
         row.providerResponse = JSON.parse(row.providerResponse as string);
       }
@@ -200,17 +190,19 @@ export class PaymentsRepository extends BaseRepository {
    * Convert database record to PaymentResponse format
    */
   convertToPaymentResponse(record: PaymentRecord): PaymentResponse {
-    return record.providerResponse || {
-      id: record.id,
-      status: record.status,
-      createdAt: Math.floor(record.createdAt.getTime() / 1000).toString(),
-      display: record.originalRequest.display,
-      source: null,
-      destination: record.originalRequest.destination,
-      externalId: record.externalId || null,
-      metadata: record.metadata || null,
-      url: null
-    };
+    return (
+      record.providerResponse || {
+        id: record.id,
+        status: record.status,
+        createdAt: Math.floor(record.createdAt.getTime() / 1000).toString(),
+        display: record.originalRequest.display,
+        source: null,
+        destination: record.originalRequest.destination,
+        externalId: record.externalId || null,
+        metadata: record.metadata || null,
+        url: null,
+      }
+    );
   }
 
   /**
@@ -220,10 +212,10 @@ export class PaymentsRepository extends BaseRepository {
     if (record.status !== 'payment_started') {
       return false;
     }
-    
+
     const staleTime = new Date();
     staleTime.setMinutes(staleTime.getMinutes() - staleMinutes);
-    
+
     return record.statusUpdatedAt < staleTime;
   }
-} 
+}

@@ -3,8 +3,6 @@
  * Implements actual Aqua API calls based on aqua.md
  */
 
-import { PaymentRequest, PaymentResponse } from '../types/payment';
-
 // Aqua API request interfaces based on aqua.md
 export interface AquaInvoiceRequest {
   mode: 'default' | 'web3';
@@ -61,22 +59,23 @@ export class AquaApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'token': this.config.apiToken,
+          token: this.config.apiToken,
         },
         body: JSON.stringify(invoiceData),
-        signal: AbortSignal.timeout(this.config.timeout)
+        signal: AbortSignal.timeout(this.config.timeout),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Aqua API createInvoice failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        throw new Error(
+          `Aqua API createInvoice failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`
+        );
       }
 
-      const responseData = await response.json() as AquaInvoiceResponse;
+      const responseData = (await response.json()) as AquaInvoiceResponse;
       console.log('[AquaApiClient] Invoice created successfully:', responseData.invoice_id);
 
       return responseData;
-
     } catch (error) {
       console.error('[AquaApiClient] Error creating invoice:', error);
       this.handleApiError(error, 'createInvoice');
@@ -94,21 +93,22 @@ export class AquaApiClient {
       const response = await fetch(`${this.config.baseUrl}/api/invoice/${invoiceId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.config.apiToken}`,
+          Authorization: `Bearer ${this.config.apiToken}`,
         },
-        signal: AbortSignal.timeout(this.config.timeout)
+        signal: AbortSignal.timeout(this.config.timeout),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Aqua API getInvoice failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        throw new Error(
+          `Aqua API getInvoice failed: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`
+        );
       }
 
-      const responseData = await response.json() as AquaInvoiceResponse;
+      const responseData = (await response.json()) as AquaInvoiceResponse;
       console.log('[AquaApiClient] Invoice retrieved successfully:', invoiceId);
 
       return responseData;
-
     } catch (error) {
       console.error('[AquaApiClient] Error getting invoice:', error);
       this.handleApiError(error, 'getInvoice');
@@ -119,17 +119,16 @@ export class AquaApiClient {
   /**
    * Generic error handling for Aqua API responses
    */
-  private handleApiError(error: any, operation: string): void {
-    // Log detailed error information
-    console.error(`[AquaApiClient] ${operation} error details:`, {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      cause: error.cause
-    });
+  private handleApiError(error: unknown, operation: string): void {
+    const errorDetails = {
+      operation,
+      timestamp: new Date().toISOString(),
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : 'UnknownError',
+    };
 
-    // Could integrate with error monitoring services here
-    // e.g., Sentry, DataDog, etc.
+    console.error(`[AquaApiClient] ${operation} error:`, errorDetails);
   }
 
   /**
@@ -140,9 +139,9 @@ export class AquaApiClient {
       const response = await fetch(`${this.config.baseUrl}/health`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.config.apiToken}`,
+          Authorization: `Bearer ${this.config.apiToken}`,
         },
-        signal: AbortSignal.timeout(5000) // 5 second timeout for health checks
+        signal: AbortSignal.timeout(5000), // 5 second timeout for health checks
       });
 
       return response.ok;
@@ -158,8 +157,8 @@ export class AquaApiClient {
   getConfig(): Partial<AquaApiConfig> {
     return {
       baseUrl: this.config.baseUrl,
-      timeout: this.config.timeout
+      timeout: this.config.timeout,
       // Don't expose API token
     };
   }
-} 
+}

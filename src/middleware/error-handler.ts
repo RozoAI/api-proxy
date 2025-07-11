@@ -3,42 +3,43 @@
  * Centralized error handling for the API
  */
 
-import { Request, Response, NextFunction } from 'express';
-import { RequestResponseTransformer } from '../utils/transformation';
+import express from 'express';
+import { RequestResponseTransformer } from '../utils/transformation.js';
 
-export interface ApiError extends Error {
+interface ApiError extends Error {
   statusCode?: number;
-  isOperational?: boolean;
-  responseData?: any;
   code?: number;
 }
 
-export class AppError extends Error implements ApiError {
-  public statusCode: number;
-  public isOperational: boolean;
-  public responseData?: any;
-
-  constructor(message: string, statusCode: number = 500, responseData?: any) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-    this.responseData = responseData;
-
-    Error.captureStackTrace(this, this.constructor);
-  }
+interface ErrorResponseDetails {
+  provider: string;
+  timestamp: string;
+  errorType: string;
+  request?: {
+    method: string;
+    path: string;
+    ip: string | undefined;
+    userAgent: string | null;
+  };
 }
 
-export const errorHandler = (
+interface ErrorResponse {
+  error: string;
+  message: string;
+  details: ErrorResponseDetails;
+}
+
+export function errorHandler(
   error: ApiError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
+  _req: express.Request,
+  res: express.Response,
+  _next: express.NextFunction
+): void {
   let statusCode = error.statusCode || 500;
   let message = error.message || 'Internal Server Error';
 
   // Log the error
-  console.error(`[ErrorHandler] ${req.method} ${req.path} - ${statusCode}: ${message}`);
+  console.error(`[ErrorHandler] ${_req.method} ${_req.path} - ${statusCode}: ${message}`);
   console.error(`[ErrorHandler] Stack trace:`, error.stack);
 
   // Handle specific error types
@@ -60,34 +61,45 @@ export const errorHandler = (
   }
 
   // Create standardized error response
-  const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'api');
+  const errorResponse = RequestResponseTransformer.createErrorResponse(
+    error,
+    'api'
+  ) as ErrorResponse;
 
   // Add request context
-  errorResponse.details.request = {
-    method: req.method,
-    path: req.path,
-    ip: req.ip,
-    userAgent: req.get('User-Agent')
+  const requestDetails = {
+    method: _req.method || 'UNKNOWN',
+    path: _req.path || '/',
+    ip: _req.ip,
+    userAgent: _req.get('User-Agent') || null,
   };
+
+  errorResponse.details.request = requestDetails;
 
   res.status(statusCode).json(errorResponse);
-};
+}
 
-export const notFoundHandler = (req: Request, res: Response): void => {
-  const error = new AppError(`Route ${req.method} ${req.path} not found`, 404);
-  
-  const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'api');
-  errorResponse.details.request = {
-    method: req.method,
-    path: req.path,
-    ip: req.ip
+export const notFoundHandler = (req: express.Request, res: express.Response): void => {
+  const error = new Error(`Route ${req.method} ${req.path} not found`) as ApiError;
+  error.statusCode = 404;
+
+  const errorResponse = RequestResponseTransformer.createErrorResponse(
+    error,
+    'api'
+  ) as ErrorResponse;
+  const requestDetails = {
+    method: req.method || 'UNKNOWN',
+    path: req.path || '/',
+    ip: req.ip,
+    userAgent: req.get('User-Agent') || null,
   };
 
+  errorResponse.details.request = requestDetails;
   res.status(404).json(errorResponse);
 };
 
-export const asyncHandler = (fn: Function) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+export const asyncHandler = (fn: (...args: unknown[]) => unknown): express.RequestHandler => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction): void => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
-}; 
+};

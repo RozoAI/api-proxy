@@ -3,104 +3,68 @@
  * Request/response logging and monitoring
  */
 
-import { Request, Response, NextFunction } from 'express';
+import express from 'express';
 
 export interface LogEntry {
-  timestamp: string;
   method: string;
   path: string;
-  ip: string;
-  userAgent?: string;
+  contentLength?: string;
+  duration?: number;
   statusCode?: number;
-  responseTime?: number;
-  requestSize?: number;
-  responseSize?: number;
 }
 
-export const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
-  const start = Date.now();
-  const contentLength = req.headers['content-length'];
-  const requestSize = contentLength ? parseInt(contentLength as string) : 0;
-
-  // Log request
-  const logEntry: LogEntry = {
-    timestamp: new Date().toISOString(),
-    method: req.method,
-    path: req.path,
-    ip: req.ip || 'unknown',
-    userAgent: req.get('User-Agent'),
-    requestSize
-  };
-
-  console.log(`[Request] ${logEntry.method} ${logEntry.path} - ${logEntry.ip} - ${logEntry.userAgent || 'Unknown'}`);
-
-  // Capture response details
-  const originalSend = res.send;
-  res.send = function(data: any) {
-    const responseTime = Date.now() - start;
-    const responseSize = typeof data === 'string' ? data.length : JSON.stringify(data).length;
-    const statusCode = res.statusCode;
-
-    // Log response
-    const responseLog: LogEntry = {
-      ...logEntry,
-      statusCode,
-      responseTime,
-      responseSize
-    };
-
-    console.log(`[Response] ${responseLog.method} ${responseLog.path} - ${responseLog.statusCode} - ${responseLog.responseTime}ms - ${responseLog.responseSize} bytes`);
-
-    // Log errors
-    if (statusCode >= 400) {
-      console.error(`[Error] ${responseLog.method} ${responseLog.path} - ${responseLog.statusCode} - ${responseLog.responseTime}ms`);
-    }
-
-    return originalSend.call(this, data);
-  };
-
-  next();
-};
-
-export const performanceLogger = (req: Request, res: Response, next: NextFunction): void => {
+export const performanceLogger = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void => {
   const start = process.hrtime.bigint();
 
-  res.on('finish', () => {
+  res.on('finish', (): void => {
     const end = process.hrtime.bigint();
-    const duration = Number(end - start) / 1000000; // Convert to milliseconds
-
-    // Log slow requests
-    if (duration > 1000) { // More than 1 second
-      console.warn(`[Performance] Slow request: ${req.method} ${req.path} took ${duration.toFixed(2)}ms`);
-    }
-
-    // Log very slow requests
-    if (duration > 5000) { // More than 5 seconds
-      console.error(`[Performance] Very slow request: ${req.method} ${req.path} took ${duration.toFixed(2)}ms`);
-    }
+    const duration = Number(end - start) / 1e6; // Convert to milliseconds
+    console.log(`[Performance] ${req.method} ${req.path} - ${duration.toFixed(2)}ms`);
   });
 
   next();
 };
 
-export const securityLogger = (req: Request, res: Response, next: NextFunction): void => {
+export const securityLogger = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void => {
   // Log potential security issues
-  const suspiciousPatterns = [
-    /\.\./, // Directory traversal
-    /<script/i, // XSS attempts
-    /union.*select/i, // SQL injection
-    /eval\(/i, // Code injection
-    /document\.cookie/i // Cookie theft attempts
-  ];
+  const suspiciousPatterns = ['/admin', '/config', '/settings', '/.env', '/backup'];
+  const path = req.path.toLowerCase();
 
-  const requestString = `${req.method} ${req.path} ${JSON.stringify(req.body)} ${JSON.stringify(req.query)}`;
-  
-  for (const pattern of suspiciousPatterns) {
-    if (pattern.test(requestString)) {
-      console.warn(`[Security] Potential security issue detected: ${req.method} ${req.path} from ${req.ip}`);
-      break;
-    }
+  if (suspiciousPatterns.some((pattern) => path.includes(pattern))) {
+    console.warn(
+      `[Security] Suspicious request detected: ${req.method} ${req.path} from ${req.ip}`
+    );
   }
 
   next();
-}; 
+};
+
+export const loggingMiddleware = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void => {
+  const start = Date.now();
+  const contentLength = req.headers['content-length'];
+
+  // Log request details
+  console.log(`[Request] ${req.method} ${req.path} - Content-Length: ${contentLength || 'N/A'}`);
+
+  // Log response details on finish
+  res.on('finish', (): void => {
+    const duration = Date.now() - start;
+    console.log(
+      `[Response] ${req.method} ${req.path} - Status: ${res.statusCode} - Duration: ${duration}ms`
+    );
+  });
+
+  next();
+};

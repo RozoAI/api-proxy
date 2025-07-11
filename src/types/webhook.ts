@@ -81,7 +81,7 @@ export type WebhookEvent = DaimoWebhookEvent | AquaWebhookEvent;
 
 // Webhook handler interface
 export interface WebhookHandler {
-  validateWebhook(headers: Record<string, string>, body: any): WebhookValidationResult;
+  validateWebhook(headers: Record<string, string>, body: unknown): WebhookValidationResult;
   processWebhook(event: WebhookEvent): Promise<WebhookResponse>;
   getEventType(): string;
 }
@@ -107,4 +107,4 @@ export interface WebhookProcessingContext {
   timestamp: Date;
   headers: Record<string, string>;
   query: Record<string, string>;
-} 
+}

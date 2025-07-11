@@ -4,8 +4,8 @@
  */
 
 import { Pool, PoolConnection } from 'mysql2/promise';
-import { getDatabasePool } from '../connection';
-
+import { getDatabasePool } from '../connection.js';
+import { randomUUID } from 'crypto';
 export abstract class BaseRepository {
   protected pool: Pool;
 
@@ -16,12 +16,9 @@ export abstract class BaseRepository {
   /**
    * Execute a query with parameters
    */
-  protected async execute<T = any>(
-    query: string,
-    params: any[] = []
-  ): Promise<[T[], any]> {
+  protected async execute<T = any>(query: string, params: any[] = []): Promise<[T[], any]> {
     const connection = await this.pool.getConnection();
-    
+
     try {
       const result = await connection.execute(query, params);
       return result as [T[], any];
@@ -33,10 +30,7 @@ export abstract class BaseRepository {
   /**
    * Execute a query and return the first row
    */
-  protected async executeOne<T = any>(
-    query: string,
-    params: any[] = []
-  ): Promise<T | null> {
+  protected async executeOne<T = any>(query: string, params: any[] = []): Promise<T | null> {
     const [rows] = await this.execute<T>(query, params);
     return rows.length > 0 ? rows[0] : null;
   }
@@ -48,7 +42,7 @@ export abstract class BaseRepository {
     operation: (connection: PoolConnection) => Promise<T>
   ): Promise<T> {
     const connection = await this.pool.getConnection();
-    
+
     try {
       await connection.beginTransaction();
       const result = await operation(connection);
@@ -66,14 +60,14 @@ export abstract class BaseRepository {
    * Generate UUID for new records
    */
   protected generateId(): string {
-    return require('crypto').randomUUID();
+    return randomUUID();
   }
 
   /**
    * Convert camelCase to snake_case for database columns
    */
   protected toSnakeCase(str: string): string {
-    return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
   }
 
   /**
@@ -83,25 +77,27 @@ export abstract class BaseRepository {
     return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
   }
 
-  /**
-   * Convert database row to camelCase object
-   */
-  protected rowToCamelCase<T>(row: any): T {
-    const result: any = {};
-    for (const [key, value] of Object.entries(row)) {
+  protected convertRowToCamelCase(row: unknown): Record<string, unknown> {
+    if (!row || typeof row !== 'object') {
+      return {};
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
       result[this.toCamelCase(key)] = value;
     }
-    return result as T;
+    return result;
   }
 
-  /**
-   * Convert camelCase object to snake_case for database
-   */
-  protected objectToSnakeCase(obj: any): any {
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
+  protected convertObjectToSnakeCase(obj: unknown): Record<string, unknown> {
+    if (!obj || typeof obj !== 'object') {
+      return {};
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       result[this.toSnakeCase(key)] = value;
     }
     return result;
   }
-} 
+}

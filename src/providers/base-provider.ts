@@ -31,7 +31,7 @@ export abstract class BaseProvider implements PaymentProvider {
       const startTime = Date.now();
       await this.performHealthCheck();
       const responseTime = Date.now() - startTime;
-      
+
       console.log(`[${this.name}] Health check passed in ${responseTime}ms`);
       return true;
     } catch (error) {
@@ -72,7 +72,7 @@ export abstract class BaseProvider implements PaymentProvider {
     if (!paymentData.destination?.tokenSymbol && !paymentData.destination?.tokenAddress) {
       errors.push('Token symbol or token address is required');
     }
-    
+
     // Check if chain is supported
     const chainId = parseInt(paymentData.destination.chainId);
     if (!this.supportedChains.includes(chainId)) {
@@ -81,7 +81,7 @@ export abstract class BaseProvider implements PaymentProvider {
 
     return {
       isValid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -92,7 +92,7 @@ export abstract class BaseProvider implements PaymentProvider {
     const response = await fetch(`${this.config.baseUrl}/health`, {
       method: 'GET',
       headers: this.getDefaultHeaders(),
-      signal: AbortSignal.timeout(this.config.timeout)
+      signal: AbortSignal.timeout(this.config.timeout),
     });
 
     if (!response.ok) {
@@ -103,7 +103,7 @@ export abstract class BaseProvider implements PaymentProvider {
   protected getDefaultHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'api-proxy/1.0.0'
+      'User-Agent': 'api-proxy/1.0.0',
     };
 
     if (this.config.apiKey) {
@@ -113,7 +113,11 @@ export abstract class BaseProvider implements PaymentProvider {
     return headers;
   }
 
-  protected createProviderError(message: string, statusCode?: number, responseData?: any): ProviderError {
+  protected createProviderError(
+    message: string,
+    statusCode?: number,
+    responseData?: unknown
+  ): ProviderError {
     const error = new Error(message) as ProviderError;
     error.provider = this.name;
     error.statusCode = statusCode;
@@ -132,27 +136,30 @@ export abstract class BaseProvider implements PaymentProvider {
         return await operation();
       } catch (error) {
         lastError = error as Error;
-        
+
         if (attempt === maxRetries) {
           break;
         }
 
         // Exponential backoff: 1s, 2s, 4s, 8s...
         const delay = Math.pow(2, attempt) * 1000;
-        console.warn(`[${this.name}] Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, error);
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.warn(
+          `[${this.name}] Attempt ${attempt + 1} failed, retrying in ${delay}ms:`,
+          error
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
     throw lastError!;
   }
 
-  protected logRequest(method: string, url: string, data?: any): void {
+  protected logRequest(method: string, url: string, data?: unknown): void {
     console.log(`[${this.name}] ${method} ${url}`, data ? JSON.stringify(data, null, 2) : '');
   }
 
-  protected logResponse(statusCode: number, data?: any): void {
+  protected logResponse(statusCode: number, data?: unknown): void {
     console.log(`[${this.name}] Response ${statusCode}`, data ? JSON.stringify(data, null, 2) : '');
   }
-} 
+}

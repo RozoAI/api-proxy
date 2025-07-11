@@ -1,5 +1,5 @@
 /**
  * Services exports
  */
- 
-export { PaymentService } from './payment-service'; 
+
+export { PaymentService } from './payment-service';

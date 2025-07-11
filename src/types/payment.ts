@@ -71,7 +71,7 @@ export interface PaymentResponseDestination {
   tokenAddress: string;
 }
 
-export type PaymentStatus = 
+export type PaymentStatus =
   | 'payment_unpaid'
   | 'payment_started'
   | 'payment_completed'
@@ -101,7 +101,7 @@ export function isDaimoChain(chainId: string | number): boolean {
     CHAIN_IDS.ETHEREUM,
     CHAIN_IDS.OPTIMISM,
     CHAIN_IDS.POLYGON,
-    CHAIN_IDS.ARBITRUM
+    CHAIN_IDS.ARBITRUM,
   ];
   return daimoChainIds.includes(chainIdNum as any); // Daimo chain IDs
-} 
+}

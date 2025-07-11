@@ -16,12 +16,12 @@ import { RequestResponseTransformer } from './utils/transformation';
 import { PaymentService } from './services/payment-service';
 import { checkDatabaseHealth } from './database/connection';
 import { WebhookRouter } from './webhooks/router';
-import { 
-  webhookLogger, 
-  webhookAuth, 
-  webhookRateLimit, 
-  webhookErrorHandler, 
-  webhookMonitoring 
+import {
+  webhookLogger,
+  webhookAuth,
+  webhookRateLimit,
+  webhookErrorHandler,
+  webhookMonitoring,
 } from './middleware/webhook-middleware';
 
 // Initialize Express app
@@ -30,10 +30,12 @@ const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+    credentials: true,
+  })
+);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -53,12 +55,14 @@ app.use(urlencoded({ extended: true, limit: '10mb' }));
 app.use((req, res, next) => {
   const start = Date.now();
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${req.ip}`);
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`
+    );
   });
-  
+
   next();
 });
 
@@ -95,17 +99,26 @@ app.get('/health', async (req, res) => {
   try {
     const stats = router.getRoutingStats();
     const dbHealthy = await checkDatabaseHealth();
-    
+
     const healthStatus = {
       status: dbHealthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       database: dbHealthy ? 'connected' : 'disconnected',
-      providers: stats.providers,
+      providers:
+        stats && typeof stats === 'object'
+          ? (stats as Record<string, unknown>).providers || {}
+          : {},
       routing: {
-        totalChains: stats.totalChains,
-        defaultProvider: stats.defaultProvider
-      }
+        totalChains:
+          stats && typeof stats === 'object'
+            ? (stats as Record<string, unknown>).totalChains || 0
+            : 0,
+        defaultProvider:
+          stats && typeof stats === 'object'
+            ? (stats as Record<string, unknown>).defaultProvider || 'unknown'
+            : 'unknown',
+      },
     };
 
     res.status(dbHealthy ? 200 : 503).json(healthStatus);
@@ -114,7 +127,7 @@ app.get('/health', async (req, res) => {
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -125,18 +138,15 @@ app.get('/health', async (req, res) => {
 app.post('/api/payment', async (req, res) => {
   try {
     console.log('[API] Creating payment:', req.body);
-    
+
     const response = await paymentService.createPayment(req.body);
-    
+
     res.status(201).json(response);
   } catch (error) {
     console.error('[API] Error creating payment:', error);
-    
-    const errorResponse = RequestResponseTransformer.createErrorResponse(
-      error, 
-      'payment_service'
-    );
-    
+
+    const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'payment_service');
+
     res.status(400).json(errorResponse);
   }
 });
@@ -146,21 +156,18 @@ app.get('/api/payment/:paymentId', async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { chainId } = req.query;
-    
+
     console.log(`[API] Getting payment: ${paymentId}, chainId: ${chainId}`);
-    
+
     const chainIdNum = chainId ? parseInt(chainId as string) : undefined;
     const response = await paymentService.getPaymentById(paymentId, chainIdNum);
-    
+
     res.status(200).json(response);
   } catch (error) {
     console.error('[API] Error getting payment:', error);
-    
-    const errorResponse = RequestResponseTransformer.createErrorResponse(
-      error, 
-      'payment_service'
-    );
-    
+
+    const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'payment_service');
+
     res.status(404).json(errorResponse);
   }
 });
@@ -170,21 +177,18 @@ app.get('/api/payment/external-id/:externalId', async (req, res) => {
   try {
     const { externalId } = req.params;
     const { chainId } = req.query;
-    
+
     console.log(`[API] Getting payment by external ID: ${externalId}, chainId: ${chainId}`);
-    
+
     const chainIdNum = chainId ? parseInt(chainId as string) : undefined;
     const response = await paymentService.getPaymentByExternalId(externalId, chainIdNum);
 
     res.status(200).json(response);
   } catch (error) {
     console.error('[API] Error getting payment by external ID:', error);
-    
-    const errorResponse = RequestResponseTransformer.createErrorResponse(
-      error, 
-      'payment_service'
-    );
-    
+
+    const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'payment_service');
+
     res.status(404).json(errorResponse);
   }
 });
@@ -198,21 +202,21 @@ app.get('/api/providers/status', async (req, res) => {
       return {
         name: provider.name,
         healthy: isHealthy,
-        supportedChains: provider.supportedChains
+        supportedChains: provider.supportedChains,
       };
     });
 
     const statuses = await Promise.all(statusPromises);
-    
+
     res.status(200).json({
       providers: statuses,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error('[API] Error getting provider status:', error);
     res.status(500).json({
       error: 'Failed to get provider status',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -226,13 +230,14 @@ app.get('/api/routing/stats', (req, res) => {
     console.error('[API] Error getting routing stats:', error);
     res.status(500).json({
       error: 'Failed to get routing statistics',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
 // Webhook endpoints with middleware
-app.use('/webhooks', 
+app.use(
+  '/webhooks',
   webhookRateLimit,
   webhookLogger,
   webhookAuth,
@@ -245,20 +250,19 @@ app.use('/webhooks',
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
-    message: `Route ${req.method} ${req.path} not found`
+    message: `Route ${req.method} ${req.path} not found`,
   });
 });
 
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('[Server] Unhandled error:', error);
-  
-  const errorResponse = RequestResponseTransformer.createErrorResponse(
-    error, 
-    'server'
-  );
-  
-  res.status(500).json(errorResponse);
-});
+app.use(
+  (error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[Server] Unhandled error:', error);
+
+    const errorResponse = RequestResponseTransformer.createErrorResponse(error, 'server');
+
+    res.status(500).json(errorResponse);
+  }
+);
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -269,7 +273,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('[Server] SIGINT received, shutting down gracefully');
   process.exit(0);
-}); 
+});
 
 // Start server
 if (require.main === module) {
@@ -280,4 +284,4 @@ if (require.main === module) {
   });
 }
 
-export default app; 
+export default app;

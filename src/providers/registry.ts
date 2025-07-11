@@ -20,13 +20,15 @@ export class ProviderRegistry {
     }
 
     this.providers.set(provider.name, provider);
-    
+
     // Update chain mapping
     for (const chainId of provider.supportedChains) {
       this.chainProviderMap.set(chainId, provider);
     }
 
-    console.log(`[Registry] Registered provider: ${provider.name} for chains: ${provider.supportedChains.join(', ')}`);
+    console.log(
+      `[Registry] Registered provider: ${provider.name} for chains: ${provider.supportedChains.join(', ')}`
+    );
   }
 
   /**
@@ -41,7 +43,7 @@ export class ProviderRegistry {
 
     // Remove from providers map
     this.providers.delete(providerName);
-    
+
     // Remove from chain mapping
     for (const chainId of provider.supportedChains) {
       if (this.chainProviderMap.get(chainId)?.name === providerName) {
@@ -68,7 +70,9 @@ export class ProviderRegistry {
     // Check if chain is configured but provider not registered
     const chainConfig = getChainConfig(chainId);
     if (chainConfig && chainConfig.enabled) {
-      console.warn(`[Registry] Chain ${chainId} configured for provider ${chainConfig.provider} but provider not registered`);
+      console.warn(
+        `[Registry] Chain ${chainId} configured for provider ${chainConfig.provider} but provider not registered`
+      );
     }
 
     return null;
@@ -106,7 +110,7 @@ export class ProviderRegistry {
       try {
         const isHealthy = await provider.isHealthy();
         this.healthStatus.set(provider.name, isHealthy);
-        
+
         if (isHealthy) {
           healthyProviders.push(provider);
         }
@@ -127,13 +131,13 @@ export class ProviderRegistry {
 
     for (const provider of this.providers.values()) {
       const isHealthy = this.healthStatus.get(provider.name) ?? false;
-      
+
       status.push({
         name: provider.name,
         enabled: true, // All registered providers are enabled
         healthy: isHealthy,
         supportedChains: provider.supportedChains,
-        lastCheck: new Date()
+        lastCheck: new Date(),
       });
     }
 
@@ -168,8 +172,6 @@ export class ProviderRegistry {
     return Array.from(this.chainProviderMap.keys());
   }
 
-
-
   /**
    * Update health status for a provider
    */
@@ -200,7 +202,7 @@ export class ProviderRegistry {
       totalProviders: this.providers.size,
       healthyProviders,
       supportedChains: this.chainProviderMap.size,
-      totalChains: enabledChains.length
+      totalChains: enabledChains.length,
     };
   }
-} 
+}

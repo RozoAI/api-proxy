@@ -8,12 +8,12 @@ import { PaymentRequest, PaymentResponse, ValidationResult } from '../types/paym
 import { ProviderConfig } from '../types/provider';
 import { getChainsByProvider, CHAIN_IDS } from '../config/chains';
 import { AquaApiClient, AquaApiConfig } from './aqua-api-client';
-import { 
-  transformDaimoToAquaRequest, 
+import {
+  transformDaimoToAquaRequest,
   transformAquaResponseToDaimo,
   validateStellarAddress,
   validateStellarAmount,
-  validateStellarToken
+  validateStellarToken,
 } from '../utils/aqua-transformation';
 
 export class AquaProvider extends BaseProvider {
@@ -22,16 +22,16 @@ export class AquaProvider extends BaseProvider {
 
   constructor(config: ProviderConfig) {
     // Get all chains configured for Aqua
-    const aquaChains = getChainsByProvider('aqua').map(chain => chain.chainId);
+    const aquaChains = getChainsByProvider('aqua').map((chain) => chain.chainId);
     super(config, aquaChains);
-    
+
     // Initialize Aqua API client
     const apiConfig: AquaApiConfig = {
       baseUrl: process.env.AQUA_BASE_URL || config.baseUrl,
       apiToken: process.env.AQUA_API_TOKEN || '',
-      timeout: parseInt(process.env.AQUA_TIMEOUT || '30000')
+      timeout: parseInt(process.env.AQUA_TIMEOUT || '30000'),
     };
-    
+
     this.aquaClient = new AquaApiClient(apiConfig);
     this.webhookToken = process.env.AQUA_WEBHOOK_TOKEN || 'default-webhook-token';
   }
@@ -57,13 +57,14 @@ export class AquaProvider extends BaseProvider {
 
       this.logResponse(200, daimoResponse);
       console.log('[AquaProvider] Payment created successfully:', daimoResponse.id);
-      
-      return daimoResponse;
 
+      return daimoResponse;
     } catch (error) {
       console.error('[AquaProvider] Error creating payment:', error);
       this.logResponse(500, { error: error instanceof Error ? error.message : 'Unknown error' });
-      throw new Error(`Failed to create Aqua payment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to create Aqua payment: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -73,19 +74,20 @@ export class AquaProvider extends BaseProvider {
     try {
       // Get fresh data from Aqua API
       const aquaResponse = await this.aquaClient.getInvoice(paymentId);
-      
+
       // Transform Aqua response back to Daimo format
       const daimoResponse = transformAquaResponseToDaimo(aquaResponse);
 
       this.logResponse(200, daimoResponse);
       console.log('[AquaProvider] Payment retrieved successfully:', paymentId);
-      
-      return daimoResponse;
 
+      return daimoResponse;
     } catch (error) {
       console.error('[AquaProvider] Error getting payment:', error);
       this.logResponse(500, { error: error instanceof Error ? error.message : 'Unknown error' });
-      throw new Error(`Failed to get Aqua payment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to get Aqua payment: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -97,7 +99,6 @@ export class AquaProvider extends BaseProvider {
       // a mapping in the database or use metadata search
       // For now, throw an error to indicate this needs to be implemented
       throw new Error('External ID lookup not yet implemented for Aqua provider');
-
     } catch (error) {
       console.error('[AquaProvider] Error getting payment by external ID:', error);
       this.logResponse(500, { error: error instanceof Error ? error.message : 'Unknown error' });
@@ -115,10 +116,12 @@ export class AquaProvider extends BaseProvider {
 
     // Aqua-specific validations
     const chainId = parseInt(paymentData.destination.chainId);
-    
+
     // Only support Stellar chain for now
     if (chainId !== CHAIN_IDS.STELLAR) {
-      errors.push(`Chain ID ${chainId} is not supported by Aqua provider (only ${CHAIN_IDS.STELLAR} supported)`);
+      errors.push(
+        `Chain ID ${chainId} is not supported by Aqua provider (only ${CHAIN_IDS.STELLAR} supported)`
+      );
     }
 
     // Validate Stellar address format
@@ -127,9 +130,12 @@ export class AquaProvider extends BaseProvider {
     }
 
     // Validate supported tokens
-    const tokenSymbol = 'tokenSymbol' in paymentData.destination ? paymentData.destination.tokenSymbol : undefined;
+    const tokenSymbol =
+      'tokenSymbol' in paymentData.destination ? paymentData.destination.tokenSymbol : undefined;
     if (!tokenSymbol || !validateStellarToken(tokenSymbol)) {
-      errors.push(`Token ${tokenSymbol || 'undefined'} is not supported by Aqua provider. Supported: XLM, USDC_XLM`);
+      errors.push(
+        `Token ${tokenSymbol || 'undefined'} is not supported by Aqua provider. Supported: XLM, USDC_XLM`
+      );
     }
 
     // Validate amount
@@ -139,27 +145,26 @@ export class AquaProvider extends BaseProvider {
 
     return {
       isValid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
   override async isHealthy(): Promise<boolean> {
     try {
       const startTime = Date.now();
-      
+
       // Check Aqua API health
       const isHealthy = await this.aquaClient.healthCheck();
-      
+
       const responseTime = Date.now() - startTime;
-      
+
       if (isHealthy) {
         console.log(`[${this.name}] Health check passed in ${responseTime}ms`);
       } else {
         console.warn(`[${this.name}] Health check failed in ${responseTime}ms`);
       }
-      
+
       return isHealthy;
-      
     } catch (error) {
       console.error(`[${this.name}] Health check failed:`, error);
       return false;
@@ -194,15 +199,14 @@ export class AquaProvider extends BaseProvider {
       console.log('[AquaProvider] Webhook event processed:', {
         invoiceId: paymentResponse.id,
         status: paymentResponse.status,
-        txHash: paymentResponse.destination.txHash
+        txHash: paymentResponse.destination.txHash,
       });
 
       // Here you could emit events or update database
       // For now, just log the successful processing
-
     } catch (error) {
       console.error('[AquaProvider] Error processing webhook event:', error);
       throw error;
     }
   }
-} 
+}

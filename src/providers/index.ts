@@ -14,4 +14,4 @@ export { AquaProvider } from './aqua-provider';
 export { ProviderRegistry } from './registry';
 
 // Export types
-export * from '../types/provider'; 
+export * from '../types/provider';

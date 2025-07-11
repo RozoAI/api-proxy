@@ -3,7 +3,7 @@
  */
 
 import { Request, Response } from 'express';
-import { PaymentRequest, PaymentResponse, ErrorResponse } from './payment';
+import { PaymentRequest } from './payment.js';
 
 export interface ApiRequest extends Request {
   paymentData?: PaymentRequest;
@@ -20,7 +20,7 @@ export interface RouteHandler {
 }
 
 export interface Middleware {
-  (req: ApiRequest, res: ApiResponse, next: Function): Promise<void> | void;
+  (req: ApiRequest, res: ApiResponse, next: (...args: unknown[]) => unknown): Promise<void> | void;
 }
 
 export interface ApiError extends Error {
@@ -53,4 +53,4 @@ export interface RequestLog {
   provider: string;
   responseTime: number;
   error?: string;
-} 
+}

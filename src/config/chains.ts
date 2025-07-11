@@ -31,7 +31,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI', 'WETH'],
-    description: 'Ethereum mainnet'
+    description: 'Ethereum mainnet',
   },
 
   // Optimism
@@ -41,7 +41,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI', 'WETH'],
-    description: 'Optimism L2'
+    description: 'Optimism L2',
   },
 
   // Polygon
@@ -51,7 +51,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['MATIC', 'USDC', 'USDT', 'DAI', 'WMATIC'],
-    description: 'Polygon PoS'
+    description: 'Polygon PoS',
   },
 
   // Arbitrum One
@@ -61,7 +61,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI', 'WETH'],
-    description: 'Arbitrum One L2'
+    description: 'Arbitrum One L2',
   },
 
   // Base
@@ -71,7 +71,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI', 'WETH'],
-    description: 'Base L2'
+    description: 'Base L2',
   },
 
   // BSC
@@ -81,7 +81,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['BNB', 'USDC', 'USDT', 'BUSD', 'WBNB'],
-    description: 'BNB Smart Chain'
+    description: 'BNB Smart Chain',
   },
 
   // Avalanche C-Chain
@@ -91,7 +91,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['AVAX', 'USDC', 'USDT', 'DAI', 'WAVAX'],
-    description: 'Avalanche C-Chain'
+    description: 'Avalanche C-Chain',
   },
 
   // Fantom
@@ -101,7 +101,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['FTM', 'USDC', 'USDT', 'DAI', 'WFTM'],
-    description: 'Fantom Opera'
+    description: 'Fantom Opera',
   },
 
   // Filecoin
@@ -111,7 +111,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['FIL', 'USDC', 'USDT'],
-    description: 'Filecoin mainnet'
+    description: 'Filecoin mainnet',
   },
 
   // Celo
@@ -121,7 +121,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['CELO', 'USDC', 'USDT', 'cUSD', 'cEUR'],
-    description: 'Celo mainnet'
+    description: 'Celo mainnet',
   },
 
   // Gnosis Chain
@@ -131,7 +131,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['XDAI', 'USDC', 'USDT', 'WXDAI'],
-    description: 'Gnosis Chain (formerly xDai)'
+    description: 'Gnosis Chain (formerly xDai)',
   },
 
   // Polygon zkEVM
@@ -141,7 +141,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI'],
-    description: 'Polygon zkEVM'
+    description: 'Polygon zkEVM',
   },
 
   // Linea
@@ -151,7 +151,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI'],
-    description: 'Linea mainnet'
+    description: 'Linea mainnet',
   },
 
   // Mantle
@@ -161,7 +161,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['MNT', 'USDC', 'USDT', 'DAI'],
-    description: 'Mantle mainnet'
+    description: 'Mantle mainnet',
   },
 
   // Scroll
@@ -171,7 +171,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI'],
-    description: 'Scroll mainnet'
+    description: 'Scroll mainnet',
   },
 
   // zkSync Era
@@ -181,11 +181,11 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'daimo',
     enabled: true,
     tokens: ['ETH', 'USDC', 'USDT', 'DAI'],
-    description: 'zkSync Era mainnet'
+    description: 'zkSync Era mainnet',
   },
 
   // ===== AQUA PROVIDER CHAINS =====
-  
+
   // Stellar (Single Chain ID for Aqua)
   {
     chainId: 10001,
@@ -193,12 +193,12 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'aqua',
     enabled: true,
     tokens: ['XLM', 'USDC_XLM'],
-    description: 'Stellar via Aqua Payment Detection Service'
+    description: 'Stellar via Aqua Payment Detection Service',
   },
 
   // ===== FUTURE AQUA CHAINS =====
   // These can be enabled when you add more chains to Aqua
-  
+
   // Example: Solana (if you add it to Aqua later)
   {
     chainId: 10002,
@@ -206,7 +206,7 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'aqua',
     enabled: false, // Disabled until implemented
     tokens: ['SOL'],
-    description: 'Solana via Aqua Payment Detection Service'
+    description: 'Solana via Aqua Payment Detection Service',
   },
 
   // Example: Cardano (if you add it to Aqua later)
@@ -216,8 +216,8 @@ export const chainConfigs: ChainConfig[] = [
     provider: 'aqua',
     enabled: false, // Disabled until implemented
     tokens: ['ADA'],
-    description: 'Cardano via Aqua Payment Detection Service'
-  }
+    description: 'Cardano via Aqua Payment Detection Service',
+  },
 ];
 
 // Token configurations with detailed information
@@ -290,15 +290,15 @@ export const tokenConfigs: TokenConfig[] = [
   { symbol: 'WXDAI', name: 'Wrapped xDai', decimals: 18, chainId: 100, provider: 'daimo' },
 
   // ===== AQUA PROVIDER TOKENS =====
-  
+
   // Stellar Tokens (same chain, different symbols)
   { symbol: 'XLM', name: 'Stellar Lumens', decimals: 7, chainId: 10001, provider: 'aqua' },
-  { symbol: 'USDC_XLM', name: 'USD Coin (Stellar)', decimals: 7, chainId: 10001, provider: 'aqua' }
+  { symbol: 'USDC_XLM', name: 'USD Coin (Stellar)', decimals: 7, chainId: 10001, provider: 'aqua' },
 ];
 
 // Utility functions
 export const getChainConfig = (chainId: number): ChainConfig | undefined => {
-  return chainConfigs.find(chain => chain.chainId === chainId);
+  return chainConfigs.find((chain) => chain.chainId === chainId);
 };
 
 export const getProviderForChain = (chainId: number): string | null => {
@@ -317,11 +317,11 @@ export const isChainEnabled = (chainId: number): boolean => {
 };
 
 export const getEnabledChains = (): ChainConfig[] => {
-  return chainConfigs.filter(chain => chain.enabled);
+  return chainConfigs.filter((chain) => chain.enabled);
 };
 
 export const getChainsByProvider = (provider: string): ChainConfig[] => {
-  return chainConfigs.filter(chain => chain.provider === provider && chain.enabled);
+  return chainConfigs.filter((chain) => chain.provider === provider && chain.enabled);
 };
 
 // Chain ID constants for easy reference
@@ -346,17 +346,17 @@ export const CHAIN_IDS = {
 
   // Aqua Provider Chains
   STELLAR: 10001,
-  
+
   // Future Aqua Chains (disabled)
   SOLANA: 10002,
-  CARDANO: 10003
+  CARDANO: 10003,
 } as const;
 
 // Provider constants
 export const PROVIDERS = {
   DAIMO: 'daimo',
-  AQUA: 'aqua'
+  AQUA: 'aqua',
 } as const;
 
-export type ProviderType = typeof PROVIDERS[keyof typeof PROVIDERS];
-export type ChainIdType = typeof CHAIN_IDS[keyof typeof CHAIN_IDS]; 
+export type ProviderType = (typeof PROVIDERS)[keyof typeof PROVIDERS];
+export type ChainIdType = (typeof CHAIN_IDS)[keyof typeof CHAIN_IDS];

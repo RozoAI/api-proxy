@@ -8,12 +8,12 @@ export interface PaymentProvider {
   name: string;
   supportedChains: number[];
   priority: number;
-  
+
   // Core payment methods matching Daimo Pay API
   createPayment(paymentData: PaymentRequest): Promise<PaymentResponse>;
   getPayment(paymentId: string): Promise<PaymentResponse>;
   getPaymentByExternalId(externalId: string): Promise<PaymentResponse>;
-  
+
   // Health and validation
   isHealthy(): Promise<boolean>;
   validateRequest(paymentData: PaymentRequest): ValidationResult;
@@ -61,4 +61,4 @@ export interface ProviderRegistry {
   getDefaultProvider(): PaymentProvider;
   getHealthyProviders(): PaymentProvider[];
   getProviderStatus(): ProviderStatus[];
-} 
+}
