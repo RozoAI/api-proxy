@@ -178,7 +178,6 @@ export class DaimoProvider extends BaseProvider {
       externalId: typeof response.externalId === 'string' ? response.externalId : undefined,
       metadata:
         response.metadata && typeof response.metadata === 'object' ? response.metadata : undefined,
-      url: typeof response.url === 'string' ? response.url : undefined,
     };
   }
 

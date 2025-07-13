@@ -24,7 +24,6 @@ POST /api/payment
     "tokenSymbol": "string",
     "tokenAddress": "string"
   },
-  "externalId": "string",
   "metadata": {}
 }
 ```
@@ -40,7 +39,6 @@ POST /api/payment
 | `destination.amountUnits` | string | Yes | Payment amount in regular decimal units (e.g., "10.50") |
 | `destination.tokenSymbol` | string | Conditional | Token symbol (required for Aqua/Stellar chains) |
 | `destination.tokenAddress` | string | Conditional | Token contract address (required for Daimo/EVM chains) |
-| `externalId` | string | No | External reference ID for tracking |
 | `metadata` | object | No | Additional metadata for the payment |
 
 ### Amount Units Format
@@ -115,7 +113,6 @@ curl -X POST http://localhost:3002/api/payment \
       "amountUnits": "5.00",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
-    "externalId": "coffee_order_123"
   }'
 ```
 
@@ -165,7 +162,6 @@ curl -X POST http://localhost:3002/api/payment \
       "amountUnits": "1.00",
       "tokenSymbol": "XLM"
     },
-    "externalId": "stellar_transfer_456"
   }'
 ```
 

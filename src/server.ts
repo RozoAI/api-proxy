@@ -176,12 +176,10 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 app.get('/api/payment/external-id/:externalId', async (req, res) => {
   try {
     const { externalId } = req.params;
-    const { chainId } = req.query;
 
-    console.log(`[API] Getting payment by external ID: ${externalId}, chainId: ${chainId}`);
+    console.log(`[API] Getting payment by external ID: ${externalId}`);
 
-    const chainIdNum = chainId ? parseInt(chainId as string) : undefined;
-    const response = await paymentService.getPaymentByExternalId(externalId, chainIdNum);
+    const response = await paymentService.getPaymentByExternalId(externalId);
 
     res.status(200).json(response);
   } catch (error) {

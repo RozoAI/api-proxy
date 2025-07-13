@@ -117,21 +117,10 @@ export class WebhookRouter {
 
         // Create Aqua webhook event object with all required fields
         const aquaEvent: AquaWebhookEvent = {
-          type: 'aqua_invoice_update',
           invoice_id: body.invoice_id,
-          mode: body.mode,
           status: body.status as AquaWebhookEvent['status'],
           status_updated_at_t: body.status_updated_at_t,
-          created_at: body.created_at,
-          address: body.address,
-          amount: body.amount,
-          callback_url: body.callback_url,
-          token_id: body.token_id,
-          metadata: body.metadata,
           transaction_hash: body.transaction_hash,
-          cover_percent: body.cover_percent,
-          cover_amount: body.cover_amount,
-          cover_operator: body.cover_operator,
         };
 
         // Process webhook
@@ -180,7 +169,6 @@ export class WebhookRouter {
       typeof typedBody.status === 'string' &&
       typeof typedBody.mode === 'string' &&
       typeof typedBody.status_updated_at_t === 'number' &&
-      typeof typedBody.created_at === 'string' &&
       typeof typedBody.address === 'string' &&
       typeof typedBody.amount === 'number' &&
       typeof typedBody.callback_url === 'string' &&

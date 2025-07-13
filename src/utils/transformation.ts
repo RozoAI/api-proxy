@@ -24,7 +24,6 @@ interface RequestInput {
     tokenSymbol?: string;
     tokenAddress?: string;
   };
-  externalId?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -101,11 +100,6 @@ export class RequestResponseTransformer {
       destination: destination,
     };
 
-    // Add optional fields if present
-    if (req.externalId) {
-      sanitized.externalId = this.sanitizeString(req.externalId, '');
-    }
-
     if (req.metadata && typeof req.metadata === 'object') {
       sanitized.metadata = this.sanitizeMetadata(req.metadata);
     }
@@ -136,7 +130,6 @@ export class RequestResponseTransformer {
       destination: this.transformPaymentDestination(response.destination),
       externalId: response.externalId ? this.sanitizeString(response.externalId, '') : undefined,
       metadata: response.metadata ? this.sanitizeMetadata(response.metadata) : undefined,
-      url: response.url ? this.sanitizeString(response.url, '') : undefined,
     };
 
     // Log transformation for debugging
@@ -310,11 +303,6 @@ export class RequestResponseTransformer {
           if (!req.destination.tokenAddress) errors.push('Token address is required');
         }
       }
-    }
-
-    // Check externalId if present
-    if (req.externalId !== undefined && typeof req.externalId !== 'string') {
-      errors.push('External ID must be a string');
     }
 
     // Check metadata if present

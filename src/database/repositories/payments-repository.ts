@@ -4,7 +4,7 @@
  */
 
 import { BaseRepository } from './base-repository';
-import { PaymentRequest, PaymentResponse } from '../../types/payment';
+import { PaymentRequest, PaymentResponse, PaymentStatus } from '../../types/payment';
 
 // Database payment record interface
 export interface PaymentRecord {
@@ -47,7 +47,7 @@ export class PaymentsRepository extends BaseRepository {
       paymentRequest.destination.amountUnits,
       paymentRequest.display.currency,
       paymentResponse.status,
-      paymentRequest.externalId || null,
+      paymentResponse.id || null,
       providerName,
       paymentRequest.destination.chainId,
       now,
@@ -129,19 +129,15 @@ export class PaymentsRepository extends BaseRepository {
   /**
    * Update payment status
    */
-  async updatePaymentStatus(
-    id: string,
-    status: string,
-    providerResponse: PaymentResponse
-  ): Promise<boolean> {
+  async updatePaymentStatus(id: string, status: string): Promise<boolean> {
     const query = `
       UPDATE payments 
-      SET status = ?, provider_response = ?, status_updated_at = ?, updated_at = ?
+      SET status = ?, status_updated_at = ?, updated_at = ?
       WHERE id = ?
     `;
 
     const now = new Date();
-    const params = [status, JSON.stringify(providerResponse), now, now, id];
+    const params = [status, now, now, id];
 
     const [result] = await this.execute(query, params);
     return (result as any).affectedRows > 0;
@@ -190,19 +186,16 @@ export class PaymentsRepository extends BaseRepository {
    * Convert database record to PaymentResponse format
    */
   convertToPaymentResponse(record: PaymentRecord): PaymentResponse {
-    return (
-      record.providerResponse || {
-        id: record.id,
-        status: record.status,
-        createdAt: Math.floor(record.createdAt.getTime() / 1000).toString(),
-        display: record.originalRequest.display,
-        source: null,
-        destination: record.originalRequest.destination,
-        externalId: record.externalId || null,
-        metadata: record.metadata || null,
-        url: null,
-      }
-    );
+    return {
+      id: record.id,
+      status: record.status as PaymentStatus,
+      createdAt: Math.floor(record.createdAt.getTime() / 1000).toString(),
+      display: record.originalRequest.display,
+      source: null,
+      destination: record.originalRequest.destination,
+      externalId: record.externalId,
+      metadata: record.metadata || null,
+    };
   }
 
   /**

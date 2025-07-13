@@ -32,7 +32,6 @@ export interface PaymentRequest {
     currency: string;
   };
   destination: PaymentDestination;
-  externalId?: string;
   metadata?: Record<string, any>;
 }
 
@@ -48,7 +47,6 @@ export interface PaymentResponse {
   destination: PaymentResponseDestination;
   externalId?: string;
   metadata?: Record<string, any>;
-  url?: string;
 }
 
 export interface PaymentSource {

@@ -51,7 +51,6 @@ Content-Type: application/json
     tokenSymbol?: string;       // Required for Aqua chains (XLM, USDC_XLM)
     tokenAddress?: string;      // Required for Daimo chains
   };
-  externalId?: string;          // Optional external reference ID
   metadata?: object;            // Optional additional data
 }
 ```
@@ -120,7 +119,6 @@ curl -X POST http://localhost:3002/api/payment \
       "amountUnits": "5.50",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
-    "externalId": "starbucks_order_12345",
     "metadata": {
       "store": "Starbucks Downtown",
       "cashier": "John Doe",
@@ -178,7 +176,6 @@ curl -X POST http://localhost:3002/api/payment \
       "amountUnits": "25.00",
       "tokenSymbol": "XLM"
     },
-    "externalId": "friend_transfer_789",
     "metadata": {
       "purpose": "Birthday gift",
       "recipient": "Alice Johnson"
@@ -236,7 +233,6 @@ curl -X POST http://localhost:3002/api/payment \
       "amountUnits": "150.00",
       "tokenSymbol": "USDC_XLM"
     },
-    "externalId": "freelance_payment_456",
     "metadata": {
       "project": "Website Design",
       "freelancer": "Bob Smith",
@@ -562,7 +558,6 @@ X-Daimo-Signature: sha256=<signature>
       "tokenSymbol": "USDC",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
-    "externalId": "starbucks_order_12345",
     "metadata": {
       "store": "Starbucks Downtown",
       "cashier": "John Doe",
@@ -892,7 +887,6 @@ const daimoPayment = await createPayment({
     amountUnits: "5.50",
     tokenAddress: "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
-  externalId: "order_12345"
 });
 
 const aquaPayment = await createPayment({
@@ -941,7 +935,6 @@ daimo_payment = create_payment({
         "amountUnits": "5.50",
         "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
-    "externalId": "order_12345"
 })
 
 aqua_payment = create_payment({

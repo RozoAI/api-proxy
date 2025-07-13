@@ -73,7 +73,6 @@ POST /api/payment
     "tokenAddress": "0x0000000000000000000000000000000000000000",
     "callData": "0x"
   },
-  "externalId": "optional-external-id",
   "metadata": {
     "orderId": "12345"
   }
@@ -101,7 +100,6 @@ POST /api/payment
     "tokenAddress": "0x0000000000000000000000000000000000000000",
     "callData": "0x"
   },
-  "externalId": "optional-external-id",
   "metadata": {
     "orderId": "12345"
   },

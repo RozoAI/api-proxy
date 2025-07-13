@@ -54,50 +54,42 @@ export class PaymentService {
   /**
    * Get payment by ID with cache-first logic
    */
-  async getPaymentById(paymentId: string, chainId?: number): Promise<PaymentResponse> {
+  async getPaymentById(paymentId: string, chainId?: number): Promise<PaymentResponse | null> {
     try {
       // First, check database
       const cachedPayment = await this.paymentsRepository.getPaymentById(paymentId);
 
-      if (cachedPayment) {
-        console.log(`[PaymentService] Found payment ${paymentId} in database`);
+      if (!cachedPayment) {
+        return null;
+      }
 
-        // Check if payment is stale (status is 'started' and > 15 mins old)
-        if (this.paymentsRepository.isPaymentStale(cachedPayment, 15)) {
-          console.log(`[PaymentService] Payment ${paymentId} is stale, fetching fresh data`);
+      console.log(`[PaymentService] Found payment ${paymentId} in database`);
 
-          try {
-            // Fetch fresh data from provider
-            const freshPayment = await this.router.routeGetPayment(paymentId, chainId);
+      // Check if payment is stale (status is 'started' and > 15 mins old)
+      if (!this.paymentsRepository.isPaymentStale(cachedPayment, 15)) {
+        // Return cached data for recent or completed payments
+        console.log(`[PaymentService] Returning cached data for payment ${paymentId}`);
+        return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
+      }
 
-            // Update database with fresh data
-            await this.paymentsRepository.updatePaymentStatus(
-              paymentId,
-              freshPayment.status,
-              freshPayment
-            );
+      console.log(`[PaymentService] Payment ${paymentId} is stale, fetching fresh data`);
 
-            console.log(`[PaymentService] Updated payment ${paymentId} with fresh data`);
-            return freshPayment;
-          } catch (providerError) {
-            console.warn(
-              `[PaymentService] Failed to fetch fresh data for ${paymentId}, returning cached data:`,
-              providerError
-            );
-            // Return cached data if provider fails
-            return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
-          }
-        } else {
-          // Return cached data for recent or completed payments
-          console.log(`[PaymentService] Returning cached data for payment ${paymentId}`);
-          return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
-        }
-      } else {
-        // Payment not in database, fetch from provider
-        console.log(
-          `[PaymentService] Payment ${paymentId} not found in database, fetching from provider`
+      try {
+        // Fetch fresh data from provider
+        const freshPayment = await this.router.routeGetPayment(paymentId, chainId);
+
+        // Update database with fresh data
+        await this.paymentsRepository.updatePaymentStatus(paymentId, freshPayment.status);
+
+        console.log(`[PaymentService] Updated payment ${paymentId} with fresh data`);
+        return freshPayment;
+      } catch (providerError) {
+        console.warn(
+          `[PaymentService] Failed to fetch fresh data for ${paymentId}, returning cached data:`,
+          providerError
         );
-        return await this.router.routeGetPayment(paymentId, chainId);
+        // Return cached data if provider fails
+        return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
       }
     } catch (error) {
       console.error(`[PaymentService] Error getting payment ${paymentId}:`, error);
@@ -108,53 +100,17 @@ export class PaymentService {
   /**
    * Get payment by external ID with cache-first logic
    */
-  async getPaymentByExternalId(externalId: string, chainId?: number): Promise<PaymentResponse> {
+  async getPaymentByExternalId(externalId: string): Promise<PaymentResponse | null> {
     try {
       // First, check database
-      const cachedPayment = await this.paymentsRepository.getPaymentByExternalId(externalId);
-
-      if (cachedPayment) {
-        console.log(`[PaymentService] Found payment with external ID ${externalId} in database`);
-
-        // Check if payment is stale (status is 'started' and > 15 mins old)
-        if (this.paymentsRepository.isPaymentStale(cachedPayment, 15)) {
-          console.log(
-            `[PaymentService] Payment with external ID ${externalId} is stale, fetching fresh data`
-          );
-
-          try {
-            // Fetch fresh data from provider
-            const freshPayment = await this.router.routeGetPaymentByExternalId(externalId, chainId);
-
-            // Update database with fresh data
-            await this.paymentsRepository.updatePaymentStatus(
-              cachedPayment.id,
-              freshPayment.status,
-              freshPayment
-            );
-
-            console.log(`[PaymentService] Updated payment ${cachedPayment.id} with fresh data`);
-            return freshPayment;
-          } catch (providerError) {
-            console.warn(
-              `[PaymentService] Failed to fetch fresh data for external ID ${externalId}, returning cached data:`,
-              providerError
-            );
-            // Return cached data if provider fails
-            return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
-          }
-        } else {
-          // Return cached data for recent or completed payments
-          console.log(`[PaymentService] Returning cached data for external ID ${externalId}`);
-          return this.paymentsRepository.convertToPaymentResponse(cachedPayment);
-        }
-      } else {
-        // Payment not in database, fetch from provider
-        console.log(
-          `[PaymentService] Payment with external ID ${externalId} not found in database, fetching from provider`
-        );
-        return await this.router.routeGetPaymentByExternalId(externalId, chainId);
+      const payment = await this.paymentsRepository.getPaymentByExternalId(externalId);
+      if (!payment) {
+        return null;
       }
+
+      // Return cached data for recent or completed payments
+      console.log(`[PaymentService] Returning cached data for external ID ${externalId}`);
+      return this.paymentsRepository.convertToPaymentResponse(payment);
     } catch (error) {
       console.error(`[PaymentService] Error getting payment by external ID ${externalId}:`, error);
       throw error;
@@ -164,17 +120,9 @@ export class PaymentService {
   /**
    * Update payment status (used by webhooks)
    */
-  async updatePaymentStatus(
-    paymentId: string,
-    status: string,
-    providerResponse: PaymentResponse
-  ): Promise<boolean> {
+  async updatePaymentStatus(paymentId: string, status: string): Promise<boolean> {
     try {
-      const updated = await this.paymentsRepository.updatePaymentStatus(
-        paymentId,
-        status,
-        providerResponse
-      );
+      const updated = await this.paymentsRepository.updatePaymentStatus(paymentId, status);
 
       if (updated) {
         console.log(`[PaymentService] Updated payment ${paymentId} status to ${status}`);

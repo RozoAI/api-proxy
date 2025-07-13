@@ -36,7 +36,6 @@ export function transformDaimoToAquaRequest(
     token: tokenId,
     description: 'RozoAI Payment',
     metadata: {
-      daimo_external_id: paymentRequest.externalId,
       daimo_intent: paymentRequest.display.intent,
       daimo_currency: paymentRequest.display.currency,
       original_metadata: paymentRequest.metadata,

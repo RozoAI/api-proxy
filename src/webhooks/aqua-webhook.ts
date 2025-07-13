@@ -8,11 +8,8 @@ import {
   WebhookHandler,
   WebhookValidationResult,
   WebhookResponse,
-  WebhookProcessingContext,
 } from '../types/webhook';
 import { PaymentService } from '../services/payment-service';
-import { PaymentResponse, PaymentStatus } from '../types/payment';
-import { transformAquaResponseToDaimo } from '../utils/aqua-transformation';
 
 export class AquaWebhookHandler implements WebhookHandler {
   private paymentService: PaymentService;
@@ -109,45 +106,37 @@ export class AquaWebhookHandler implements WebhookHandler {
       // Map Aqua statuses to internal payment statuses
       const internalStatus = this.mapAquaStatusToInternal(event.status);
 
-      // Create PaymentResponse object from Aqua event using transformation utility
-      const paymentResponse = transformAquaResponseToDaimo(event);
-
       // Try to find payment by external ID (invoice_id)
       // Since Aqua uses invoice_id as the external identifier
       try {
         const existingPayment = await this.paymentService.getPaymentByExternalId(event.invoice_id);
-
-        if (existingPayment) {
-          // Update existing payment
-          const updated = await this.paymentService.updatePaymentStatus(
-            existingPayment.id,
-            internalStatus,
-            paymentResponse
-          );
-
-          if (updated) {
-            console.log(
-              `[AquaWebhook] Successfully updated payment ${existingPayment.id} to status ${internalStatus}`
-            );
-            return {
-              success: true,
-              message: `Payment ${existingPayment.id} updated to ${internalStatus}`,
-            };
-          } else {
-            console.warn(`[AquaWebhook] Failed to update payment ${existingPayment.id}`);
-            return {
-              success: false,
-              error: `Failed to update payment ${existingPayment.id}`,
-            };
-          }
-        } else {
-          // Payment not found in database
-          console.warn(
-            `[AquaWebhook] Payment with external ID ${event.invoice_id} not found in database`
-          );
+        if (!existingPayment) {
+          console.warn(`[AquaWebhook] Payment not found for invoice ${event.invoice_id}`);
           return {
             success: false,
-            error: `Payment with external ID ${event.invoice_id} not found`,
+            error: `Payment not found for invoice ${event.invoice_id}`,
+          };
+        }
+
+        // Update existing payment
+        const updated = await this.paymentService.updatePaymentStatus(
+          existingPayment.id,
+          internalStatus
+        );
+
+        if (updated) {
+          console.log(
+            `[AquaWebhook] Successfully updated payment ${existingPayment.id} to status ${internalStatus}`
+          );
+          return {
+            success: true,
+            message: `Payment ${existingPayment.id} updated to ${internalStatus}`,
+          };
+        } else {
+          console.warn(`[AquaWebhook] Failed to update payment ${existingPayment.id}`);
+          return {
+            success: false,
+            error: `Failed to update payment ${existingPayment.id}`,
           };
         }
       } catch (error) {
@@ -197,41 +186,6 @@ export class AquaWebhookHandler implements WebhookHandler {
   }
 
   /**
-   * Create PaymentResponse object from Aqua webhook event
-   */
-  private createPaymentResponseFromAquaEvent(event: AquaWebhookEvent): PaymentResponse {
-    return {
-      id: event.invoice_id,
-      status: this.mapAquaStatusToInternal(event.status) as PaymentStatus,
-      createdAt: new Date(event.created_at).getTime().toString(),
-      display: {
-        intent: `Aqua Invoice ${event.invoice_id}`,
-        currency: 'USD', // Default currency, could be enhanced based on token_id
-      },
-      source: null,
-      destination: {
-        destinationAddress: event.address,
-        txHash: event.transaction_hash || null,
-        chainId: '10001', // Stellar chain ID from config
-        amountUnits: event.amount.toString(), // Amount is already in regular units
-        tokenSymbol: this.getTokenSymbolFromTokenId(event.token_id),
-        tokenAddress: '', // Not used for Aqua/Stellar chains
-      },
-      externalId: event.invoice_id,
-      metadata: {
-        aqua_mode: event.mode,
-        transaction_hash: event.transaction_hash,
-        token_id: event.token_id,
-        cover_percent: event.cover_percent,
-        cover_amount: event.cover_amount,
-        cover_operator: event.cover_operator,
-        original_metadata: event.metadata,
-      },
-      url: event.callback_url,
-    };
-  }
-
-  /**
    * Get token symbol from Aqua token ID
    */
   private getTokenSymbolFromTokenId(tokenId: string): string {
@@ -247,23 +201,5 @@ export class AquaWebhookHandler implements WebhookHandler {
       default:
         return tokenId.toUpperCase();
     }
-  }
-
-  /**
-   * Create webhook processing context
-   */
-  createProcessingContext(
-    headers: Record<string, string>,
-    query: Record<string, string>,
-    event: AquaWebhookEvent
-  ): WebhookProcessingContext {
-    return {
-      provider: 'aqua',
-      eventType: event.type,
-      externalId: event.invoice_id,
-      timestamp: new Date(),
-      headers,
-      query,
-    };
   }
 }

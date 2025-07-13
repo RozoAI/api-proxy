@@ -29,8 +29,7 @@ export class DaimoWebhook {
       // Update payment status in database
       const updated = await this.paymentService.updatePaymentStatus(
         event.paymentId,
-        internalStatus,
-        event.payment
+        internalStatus
       );
 
       if (updated) {
