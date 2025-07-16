@@ -111,7 +111,6 @@ export function transformAquaResponseToDaimo(
       cover_operator: aquaResponse.cover_operator,
       original_metadata: aquaResponse.metadata,
     },
-    url: aquaResponse.callback_url,
   };
 
   console.log('[AquaTransformation] Transformed to Daimo format:', daimoResponse.id);
