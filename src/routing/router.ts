@@ -60,6 +60,11 @@ export class PaymentRouter {
         provider.name
       );
 
+      transformedResponse.destination.destinationAddress =
+        sanitizedRequest.destination.destinationAddress || '';
+      transformedResponse.destination.tokenAddress =
+        sanitizedRequest.destination.tokenAddress || '';
+
       console.log(`[Router] Successfully processed payment with ${provider.name}`);
       return transformedResponse;
     } catch (error) {
