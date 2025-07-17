@@ -10,14 +10,20 @@ import {
   WebhookResponse,
 } from '../types/webhook';
 import { PaymentService } from '../services/payment-service';
+import { WithdrawalIntegrationService } from '../services/withdrawal-integration-service';
+import { PaymentsRepository } from '../database/repositories/payments-repository';
 
 export class AquaWebhookHandler implements WebhookHandler {
   private paymentService: PaymentService;
   private webhookToken: string;
+  private withdrawalIntegration: WithdrawalIntegrationService;
+  private paymentsRepository: PaymentsRepository;
 
   constructor(paymentService: PaymentService, webhookToken: string) {
     this.paymentService = paymentService;
     this.webhookToken = webhookToken;
+    this.withdrawalIntegration = new WithdrawalIntegrationService();
+    this.paymentsRepository = new PaymentsRepository();
   }
 
   /**
@@ -128,6 +134,22 @@ export class AquaWebhookHandler implements WebhookHandler {
           console.log(
             `[AquaWebhook] Successfully updated payment ${existingPayment.id} to status ${internalStatus}`
           );
+
+          // NEW: Trigger withdrawal if payment completed
+          if (internalStatus === 'payment_completed') {
+            try {
+              // Get the payment record for withdrawal processing
+              const paymentRecord = await this.paymentsRepository.getPaymentById(
+                existingPayment.id
+              );
+              if (paymentRecord) {
+                await this.withdrawalIntegration.handlePaymentCompletion(paymentRecord);
+              }
+            } catch (error) {
+              console.error('[AquaWebhook] Failed to trigger withdrawal:', error);
+            }
+          }
+
           return {
             success: true,
             message: `Payment ${existingPayment.id} updated to ${internalStatus}`,
