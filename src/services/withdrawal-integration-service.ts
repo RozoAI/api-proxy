@@ -62,7 +62,6 @@ export class WithdrawalIntegrationService {
             withdrawId: withdrawalResponse.data.withdraw_id,
             amount: payment.amount,
             currency: payment.currency,
-            availableBalance: withdrawalResponse.data.available_balance,
           });
         } else {
           console.warn(
