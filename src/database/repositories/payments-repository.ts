@@ -13,6 +13,7 @@ export interface PaymentRecord {
   currency: string;
   status: string;
   externalId?: string;
+  withdrawId?: string;
   providerName: string;
   chainId: string;
   createdAt: Date;
@@ -69,11 +70,11 @@ export class PaymentsRepository extends BaseRepository {
    */
   async getPaymentById(id: string): Promise<PaymentRecord | null> {
     const query = `
-      SELECT id, amount, currency, status, external_id as externalId, provider_name as providerName,
-             chain_id as chainId, created_at as createdAt, updated_at as updatedAt,
-             status_updated_at as statusUpdatedAt, provider_response as providerResponse,
-             metadata, original_request as originalRequest
-      FROM payments 
+      SELECT id, amount, currency, status, external_id as externalId, withdraw_id as withdrawId,
+             provider_name as providerName, chain_id as chainId, created_at as createdAt,
+             updated_at as updatedAt, status_updated_at as statusUpdatedAt,
+             provider_response as providerResponse, metadata, original_request as originalRequest
+      FROM payments
       WHERE id = ?
     `;
 
@@ -210,5 +211,92 @@ export class PaymentsRepository extends BaseRepository {
     staleTime.setMinutes(staleTime.getMinutes() - staleMinutes);
 
     return record.statusUpdatedAt < staleTime;
+  }
+
+  /**
+   * Update payment with withdrawal ID
+   */
+  async updatePaymentWithWithdrawId(paymentId: string, withdrawId: string): Promise<boolean> {
+    const query = `
+      UPDATE payments 
+      SET withdraw_id = ?, updated_at = ?
+      WHERE id = ?
+    `;
+
+    const params = [withdrawId, new Date(), paymentId];
+
+    try {
+      const [result] = await this.execute(query, params);
+      const updateResult = result as any;
+      return updateResult.affectedRows > 0;
+    } catch (error) {
+      console.error('[PaymentsRepository] Error updating payment with withdraw ID:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get payment by withdraw ID
+   */
+  async getPaymentByWithdrawId(withdrawId: string): Promise<PaymentRecord | null> {
+    const query = `
+      SELECT id, amount, currency, status, external_id as externalId, withdraw_id as withdrawId,
+             provider_name as providerName, chain_id as chainId, created_at as createdAt,
+             updated_at as updatedAt, status_updated_at as statusUpdatedAt,
+             provider_response as providerResponse, metadata, original_request as originalRequest
+      FROM payments
+      WHERE withdraw_id = ?
+    `;
+
+    const [rows] = await this.execute<PaymentRecord>(query, [withdrawId]);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const row = rows[0];
+
+    // Parse JSON fields
+    if (row.providerResponse) {
+      row.providerResponse = JSON.parse(row.providerResponse as string);
+    }
+    if (row.metadata) {
+      row.metadata = JSON.parse(row.metadata as string);
+    }
+    if (row.originalRequest) {
+      row.originalRequest = JSON.parse(row.originalRequest as string);
+    }
+
+    return row;
+  }
+
+  /**
+   * Get payments that have withdrawal IDs (payments that triggered withdrawals)
+   */
+  async getPaymentsWithWithdrawals(): Promise<PaymentRecord[]> {
+    const query = `
+      SELECT id, amount, currency, status, external_id as externalId, withdraw_id as withdrawId,
+             provider_name as providerName, chain_id as chainId, created_at as createdAt,
+             updated_at as updatedAt, status_updated_at as statusUpdatedAt,
+             provider_response as providerResponse, metadata, original_request as originalRequest
+      FROM payments
+      WHERE withdraw_id IS NOT NULL
+      ORDER BY created_at DESC
+    `;
+
+    const [rows] = await this.execute<PaymentRecord>(query, []);
+
+    return rows.map((row) => {
+      if (row.providerResponse) {
+        row.providerResponse = JSON.parse(row.providerResponse as string);
+      }
+      if (row.metadata) {
+        row.metadata = JSON.parse(row.metadata as string);
+      }
+      if (row.originalRequest) {
+        row.originalRequest = JSON.parse(row.originalRequest as string);
+      }
+      return row;
+    });
   }
 }

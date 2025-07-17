@@ -3,15 +3,21 @@
  * Handles triggering external withdrawal API for eligible payments
  */
 
-import { WithdrawalApiClient, CreateWithdrawalRequest } from '../clients/withdrawal-api-client';
-import { PaymentRecord } from '../database/repositories/payments-repository';
+import {
+  WithdrawalApiClient,
+  CreateWithdrawalRequest,
+  CreateWithdrawalResponse,
+} from '../clients/withdrawal-api-client';
+import { PaymentRecord, PaymentsRepository } from '../database/repositories/payments-repository';
 
 export class WithdrawalIntegrationService {
   private withdrawalApiClient: WithdrawalApiClient;
+  private paymentsRepository: PaymentsRepository;
   private enabled: boolean;
 
   constructor() {
     this.withdrawalApiClient = new WithdrawalApiClient();
+    this.paymentsRepository = new PaymentsRepository();
     this.enabled = process.env.WITHDRAWAL_INTEGRATION_ENABLED !== 'false';
   }
 
@@ -41,10 +47,34 @@ export class WithdrawalIntegrationService {
 
       // Create withdrawal request
       const withdrawalRequest = this.buildWithdrawalRequest(payment);
-      await this.createWithdrawalWithRetry(withdrawalRequest);
+      const withdrawalResponse = await this.createWithdrawalWithRetry(withdrawalRequest);
+
+      // Save withdraw_id to the payment record
+      if (withdrawalResponse && withdrawalResponse.data.withdraw_id) {
+        const updated = await this.paymentsRepository.updatePaymentWithWithdrawId(
+          payment.id,
+          withdrawalResponse.data.withdraw_id
+        );
+
+        if (updated) {
+          console.log('[WithdrawalIntegration] Successfully saved withdraw_id to payment:', {
+            paymentId: payment.id,
+            withdrawId: withdrawalResponse.data.withdraw_id,
+            amount: payment.amount,
+            currency: payment.currency,
+            availableBalance: withdrawalResponse.data.available_balance,
+          });
+        } else {
+          console.warn(
+            '[WithdrawalIntegration] Failed to save withdraw_id to payment:',
+            payment.id
+          );
+        }
+      }
 
       console.log('[WithdrawalIntegration] Successfully triggered withdrawal for payment:', {
         paymentId: payment.id,
+        withdrawId: withdrawalResponse?.data.withdraw_id,
         amount: payment.amount,
         currency: payment.currency,
       });
@@ -65,7 +95,7 @@ export class WithdrawalIntegrationService {
     return (
       payment.status === 'payment_completed' &&
       payment.chainId === '10001' && // Stellar chain ID
-      payment.currency === 'USDC' &&
+      (payment.currency === 'USDC' || payment.currency === 'USD') &&
       payment.providerName === 'aqua' &&
       parseFloat(payment.amount) > 0
     );
@@ -96,7 +126,7 @@ export class WithdrawalIntegrationService {
   private async createWithdrawalWithRetry(
     request: CreateWithdrawalRequest,
     maxRetries: number = 3
-  ): Promise<void> {
+  ): Promise<CreateWithdrawalResponse | null> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const response = await this.withdrawalApiClient.createWithdrawal(request);
@@ -107,7 +137,7 @@ export class WithdrawalIntegrationService {
           attempt,
         });
 
-        return; // Success - exit retry loop
+        return response; // Success - return the response
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -129,6 +159,9 @@ export class WithdrawalIntegrationService {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+
+    // This should never be reached due to the throw in the loop, but TypeScript requires it
+    return null;
   }
 
   /**
