@@ -194,18 +194,19 @@ export class AquaProvider extends BaseProvider {
 
   private getAquaTokenId(tokenSymbol: string): string {
     const tokenMap: Record<string, string> = {
-      XLM: 'xlm',
-      USDC_XLM: 'usdc',
-      USDC: 'usdc',
+      XLM: 'XLM',
+      USDC_XLM: 'USDC_XLM',
+      USDC: 'USDC_XLM',
     };
 
-    return tokenMap[tokenSymbol] || 'xlm';
+    return tokenMap[tokenSymbol] || 'XLM';
   }
 
   private mapAquaTokenToSymbol(aquaTokenId: string): string {
     const tokenMap: Record<string, string> = {
       xlm: 'XLM',
       usdc: 'USDC_XLM',
+      usdc_xlm: 'USDC_XLM',
     };
 
     return tokenMap[aquaTokenId] || 'XLM';
