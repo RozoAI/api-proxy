@@ -32,11 +32,8 @@ serve(async (req) => {
     // Check database health
     const dbHealthy = await checkDatabaseHealth();
 
-    // Check withdrawal integration health
-    const withdrawalHealth = await checkWithdrawalHealth();
-
     const responseTime = Math.round(performance.now() - startTime);
-    const overallHealthy = dbHealthy && withdrawalHealth.healthy;
+    const overallHealthy = dbHealthy;
 
     const healthStatus = {
       status: overallHealthy ? 'healthy' : 'unhealthy',
@@ -55,11 +52,6 @@ serve(async (req) => {
           idle: 0,
           total: 1,
         },
-      },
-      withdrawal_integration: {
-        status: withdrawalHealth.healthy ? 'healthy' : 'unhealthy',
-        enabled: withdrawalHealth.enabled,
-        supportedConversions: ['USDC', 'USDC_XLM', 'XLM'], // Static list matching original implementation,
       },
     };
 
@@ -92,30 +84,5 @@ async function checkDatabaseHealth(): Promise<boolean> {
   } catch (error) {
     console.error('[HealthCheck] Database health check failed:', error);
     return false;
-  }
-}
-
-async function checkWithdrawalHealth(): Promise<{ healthy: boolean; enabled: boolean }> {
-  try {
-    const enabled = Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true';
-    if (!enabled) {
-      return { healthy: true, enabled: false };
-    }
-
-    // If enabled, try a simple API connectivity test
-    const apiUrl = Deno.env.get('WITHDRAWAL_API_BASE_URL');
-    if (!apiUrl) {
-      return { healthy: false, enabled: true };
-    }
-
-    const response = await fetch(`${apiUrl}/health`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    return { healthy: response.ok, enabled: true };
-  } catch (error) {
-    console.error('[HealthCheck] Withdrawal integration health check failed:', error);
-    return { healthy: false, enabled: true };
   }
 }
