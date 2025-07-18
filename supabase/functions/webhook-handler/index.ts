@@ -210,7 +210,7 @@ function isValidWebhookToken(provider: string | null, token: string): boolean {
 async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
   try {
     // Check if withdrawal integration is enabled
-    const withdrawalApiUrl = Deno.env.get('WITHDRAWAL_API_URL');
+    const withdrawalApiUrl = Deno.env.get('WITHDRAWAL_API_BASE_URL');
     const withdrawalEnabled = Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true';
 
     if (!withdrawalEnabled || !withdrawalApiUrl) {

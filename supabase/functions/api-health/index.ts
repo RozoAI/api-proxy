@@ -103,7 +103,7 @@ async function checkWithdrawalHealth(): Promise<{ healthy: boolean; enabled: boo
     }
 
     // If enabled, try a simple API connectivity test
-    const apiUrl = Deno.env.get('WITHDRAWAL_API_URL');
+    const apiUrl = Deno.env.get('WITHDRAWAL_API_BASE_URL');
     if (!apiUrl) {
       return { healthy: false, enabled: true };
     }
