@@ -1,7 +1,5 @@
 // Payment API Edge Function
 // Handles payment creation and retrieval - Original API Compatible
-import '../shared/deno-types.ts';
-import '../shared/deno-stdlib.d.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentService } from '../shared/payment-service.ts';
@@ -17,10 +15,12 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const path = url.pathname;
+    // Extract path after /payment-api
+    const fullPath = url.pathname;
+    const path = fullPath === '/payment-api' ? '/' : fullPath.replace('/payment-api', '');
 
     // Route based on HTTP method and path - Original API Format
-    if (req.method === 'POST' && path === '/') {
+    if (req.method === 'POST' && (path === '/' || path === '')) {
       // POST /api/payment - Create payment
       const paymentData: PaymentRequest = await req.json();
       return await handleCreatePayment(paymentData);

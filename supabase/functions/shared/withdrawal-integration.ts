@@ -1,27 +1,35 @@
 // Withdrawal Integration for Edge Functions
-import { PaymentDatabase } from './database.ts';
+// Sophisticated withdrawal integration with automatic payment conversion
 import type { PaymentRecord, CreateWithdrawalRequest, CreateWithdrawalResponse } from './types.ts';
 
+export interface WithdrawalRequest {
+  customerEmail: string;
+  fromCurrency: string;
+  amount: number;
+  withdrawCurrency?: string;
+  externalPaymentId?: string;
+  provider?: string;
+  paymentMetadata?: Record<string, any>;
+}
+
+export interface WithdrawalResponse {
+  success: boolean;
+  withdrawalId?: string;
+  message?: string;
+  error?: string;
+}
+
 export class WithdrawalIntegration {
-  private db: PaymentDatabase;
   private enabled: boolean;
   private baseUrl: string;
   private jwtToken: string;
   private timeout: number;
 
   constructor() {
-    this.db = new PaymentDatabase();
     this.enabled = Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') !== 'false';
     this.baseUrl = Deno.env.get('WITHDRAWAL_API_BASE_URL') || '';
     this.jwtToken = Deno.env.get('WITHDRAWAL_API_JWT_TOKEN') || '';
     this.timeout = parseInt(Deno.env.get('WITHDRAWAL_API_TIMEOUT') || '10000');
-
-    if (!this.baseUrl || !this.jwtToken) {
-      console.warn(
-        '[WithdrawalIntegration] Missing configuration, withdrawal integration disabled'
-      );
-      this.enabled = false;
-    }
   }
 
   async handlePaymentCompletion(payment: PaymentRecord): Promise<void> {
@@ -182,7 +190,12 @@ export class WithdrawalIntegration {
       throw new Error(`Withdrawal API Error [${response.status}]: ${errorText}`);
     }
 
-    const result = await response.json();
+    const responseText = await response.text();
+    if (!responseText) {
+      throw new Error('Empty response from Withdrawal API');
+    }
+
+    const result = JSON.parse(responseText);
     console.log('[WithdrawalIntegration] Withdrawal created:', result.data?.withdraw_id);
 
     return result;

@@ -27,7 +27,17 @@ export class DaimoProvider extends BaseProvider {
         body: JSON.stringify(this.transformToDaimoRequest(paymentData)),
       });
 
-      const responseData = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Daimo API error ${response.status}: ${errorText || 'Unknown error'}`);
+      }
+
+      const responseText = await response.text();
+      if (!responseText) {
+        throw new Error('Empty response from Daimo API');
+      }
+
+      const responseData = JSON.parse(responseText);
       this.logResponse(response, responseData);
 
       if (!response.ok) {

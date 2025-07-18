@@ -1,7 +1,5 @@
 // Provider Status Edge Function
 // Original API Compatible: GET /api/providers/status
-import '../shared/deno-types.ts';
-import '../shared/deno-stdlib.d.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentRouter } from '../shared/payment-router.ts';

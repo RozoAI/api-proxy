@@ -29,14 +29,18 @@ export class AquaProvider extends BaseProvider {
         body: JSON.stringify(aquaRequest),
       });
 
-      const responseData = await response.json();
-      this.logResponse(response, responseData);
-
       if (!response.ok) {
-        throw new Error(
-          `Aqua API error: ${response.status} - ${responseData.error || 'Unknown error'}`
-        );
+        const errorText = await response.text();
+        throw new Error(`Aqua API error ${response.status}: ${errorText || 'Unknown error'}`);
       }
+
+      const responseText = await response.text();
+      if (!responseText) {
+        throw new Error('Empty response from Aqua API');
+      }
+
+      const responseData = JSON.parse(responseText);
+      this.logResponse(response, responseData);
 
       return this.transformFromAquaResponse(responseData, paymentData);
     } catch (error) {
@@ -60,14 +64,18 @@ export class AquaProvider extends BaseProvider {
         }
       );
 
-      const responseData = await response.json();
-      this.logResponse(response, responseData);
-
       if (!response.ok) {
-        throw new Error(
-          `Aqua API error: ${response.status} - ${responseData.error || 'Payment not found'}`
-        );
+        const errorText = await response.text();
+        throw new Error(`Aqua API error ${response.status}: ${errorText || 'Payment not found'}`);
       }
+
+      const responseText = await response.text();
+      if (!responseText) {
+        throw new Error('Empty response from Aqua API');
+      }
+
+      const responseData = JSON.parse(responseText);
+      this.logResponse(response, responseData);
 
       return this.transformFromAquaResponse(responseData);
     } catch (error) {

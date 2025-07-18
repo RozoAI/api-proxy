@@ -1,7 +1,5 @@
 // Health Check Edge Function
 // Original API Compatible: GET /health
-import '../shared/deno-types.ts';
-import '../shared/deno-stdlib.d.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentDatabase } from '../shared/database.ts';
@@ -34,18 +32,11 @@ serve(async (req) => {
     // Check database health
     const dbHealthy = await checkDatabaseHealth();
 
-    // Check provider health
-    const providerHealth = await checkProviderHealth();
-
     // Check withdrawal integration health
     const withdrawalHealth = await checkWithdrawalHealth();
 
     const responseTime = Math.round(performance.now() - startTime);
-    const overallHealthy =
-      dbHealthy &&
-      providerHealth.daimo.healthy &&
-      providerHealth.aqua.healthy &&
-      withdrawalHealth.healthy;
+    const overallHealthy = dbHealthy && withdrawalHealth.healthy;
 
     const healthStatus = {
       status: overallHealthy ? 'healthy' : 'unhealthy',
@@ -55,18 +46,6 @@ serve(async (req) => {
       environment: {
         deno_version: Deno.version.deno,
         typescript_version: Deno.version.typescript,
-      },
-      providers: {
-        daimo: {
-          status: providerHealth.daimo.healthy ? 'healthy' : 'unhealthy',
-          responseTime: providerHealth.daimo.responseTime,
-          lastCheck: new Date().toISOString(),
-        },
-        aqua: {
-          status: providerHealth.aqua.healthy ? 'healthy' : 'unhealthy',
-          responseTime: providerHealth.aqua.responseTime,
-          lastCheck: new Date().toISOString(),
-        },
       },
       database: {
         status: dbHealthy ? 'healthy' : 'unhealthy',
@@ -114,56 +93,6 @@ async function checkDatabaseHealth(): Promise<boolean> {
     console.error('[HealthCheck] Database health check failed:', error);
     return false;
   }
-}
-
-async function checkProviderHealth(): Promise<{
-  daimo: { healthy: boolean; responseTime: number };
-  aqua: { healthy: boolean; responseTime: number };
-}> {
-  const daimoUrl = Deno.env.get('DAIMO_BASE_URL') || 'https://pay.daimo.com';
-  const daimoKey = Deno.env.get('DAIMO_API_KEY');
-
-  // Check Daimo health
-  let daimoHealthy = false;
-  let daimoResponseTime = 0;
-
-  try {
-    const startTime = performance.now();
-    const response = await fetch(`${daimoUrl}/health`, {
-      method: 'GET',
-      headers: daimoKey ? { 'Api-Key': daimoKey } : {},
-    });
-    daimoResponseTime = Math.round(performance.now() - startTime);
-    daimoHealthy = response.ok;
-  } catch (error) {
-    console.error('[HealthCheck] Daimo health check failed:', error);
-    daimoResponseTime = 30000; // Timeout value
-  }
-
-  // Check Aqua health
-  const aquaUrl = Deno.env.get('AQUA_BASE_URL') || 'https://api.aqua.network';
-  const aquaToken = Deno.env.get('AQUA_API_TOKEN');
-
-  let aquaHealthy = false;
-  let aquaResponseTime = 0;
-
-  try {
-    const startTime = performance.now();
-    const response = await fetch(`${aquaUrl}/health`, {
-      method: 'GET',
-      headers: aquaToken ? { Authorization: `Bearer ${aquaToken}` } : {},
-    });
-    aquaResponseTime = Math.round(performance.now() - startTime);
-    aquaHealthy = response.ok;
-  } catch (error) {
-    console.error('[HealthCheck] Aqua health check failed:', error);
-    aquaResponseTime = 30000; // Timeout value
-  }
-
-  return {
-    daimo: { healthy: daimoHealthy, responseTime: daimoResponseTime },
-    aqua: { healthy: aquaHealthy, responseTime: aquaResponseTime },
-  };
 }
 
 async function checkWithdrawalHealth(): Promise<{ healthy: boolean; enabled: boolean }> {

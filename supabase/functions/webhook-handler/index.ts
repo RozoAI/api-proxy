@@ -1,7 +1,5 @@
 // Webhook Handler Edge Function
 // Original API Compatible: Handles both Daimo and Aqua webhooks
-import '../shared/deno-types.ts';
-import '../shared/deno-stdlib.d.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentDatabase } from '../shared/database.ts';
@@ -265,7 +263,15 @@ async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
       throw new Error(`Withdrawal API error: ${withdrawalResponse.status}`);
     }
 
-    const withdrawalResult = await withdrawalResponse.json();
+    if (!withdrawalResponse.ok) {
+      const errorText = await withdrawalResponse.text();
+      throw new Error(
+        `Withdrawal API error ${withdrawalResponse.status}: ${errorText || 'Unknown error'}`
+      );
+    }
+
+    const withdrawalText = await withdrawalResponse.text();
+    const withdrawalResult = withdrawalText ? JSON.parse(withdrawalText) : {};
     console.log(
       `[WebhookHandler] Withdrawal integration triggered for ${paymentId}:`,
       withdrawalResult

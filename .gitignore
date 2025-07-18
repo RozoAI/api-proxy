@@ -45,3 +45,5 @@ build/
 
 # TypeScript
 *.tsbuildinfo 
+
+.temp/
