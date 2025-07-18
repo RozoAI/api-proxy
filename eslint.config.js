@@ -6,27 +6,41 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['node_modules/**', 'supabase/.temp/**'],
   },
   eslint.configs.recommended,
+  // Deno configuration for Supabase Edge Functions
   {
-    files: ['**/*.ts'],
+    files: ['supabase/functions/**/*.ts'],
     languageOptions: {
       parser: tseslintParser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
-        project: './tsconfig.json',
       },
       globals: {
+        // Deno globals
+        Deno: 'readonly',
         console: 'readonly',
-        process: 'readonly',
         fetch: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        Headers: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        AbortController: 'readonly',
         AbortSignal: 'readonly',
         setTimeout: 'readonly',
-        require: 'readonly',
-        module: 'readonly',
-        __dirname: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        atob: 'readonly',
+        btoa: 'readonly',
+        globalThis: 'readonly',
+        performance: 'readonly',
       },
     },
     plugins: {
@@ -36,13 +50,15 @@ export default [
     rules: {
       ...tseslint.configs.recommended.rules,
       ...eslintConfigPrettier.rules,
-      '@typescript-eslint/explicit-function-return-type': 'warn',
+      '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { 
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
         ignoreRestSiblings: true,
       }],
-      '@typescript-eslint/no-explicit-any': 'off', // Temporarily disable any type warnings
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
       'prettier/prettier': ['error', {
         semi: true,
         trailingComma: 'es5',
@@ -52,20 +68,12 @@ export default [
         useTabs: false,
         endOfLine: 'auto',
       }],
-      '@typescript-eslint/ban-types': ['error', {
-        types: {
-          'Function': {
-            message: 'Specify the function type instead',
-            fixWith: '(...args: any[]) => any',
-          },
-        },
-      }],
-      '@typescript-eslint/no-var-requires': 'error',
+      '@typescript-eslint/ban-types': 'off',
       '@typescript-eslint/no-loss-of-precision': 'error',
-      '@typescript-eslint/no-unsafe-assignment': 'off', // Temporarily disable unsafe assignment warnings
-      '@typescript-eslint/no-unsafe-member-access': 'off', // Temporarily disable unsafe member access warnings
-      '@typescript-eslint/no-unsafe-call': 'off', // Temporarily disable unsafe call warnings
-      '@typescript-eslint/no-unsafe-return': 'off', // Temporarily disable unsafe return warnings
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
 ]; 

@@ -1,387 +1,488 @@
-# Payment API Proxy
+# Payment API Proxy - Supabase Edge Functions
 
-A TypeScript-based Express API proxy that routes payment requests to multiple providers (Daimo Pay and Aqua) based on chain ID, maintaining Daimo Pay's request/response format.
+A multi-provider payment gateway built with Supabase Edge Functions, supporting Daimo Pay and Aqua payment providers with automatic withdrawal integration.
 
-## Features
+## 🏗️ Architecture Overview
 
-- **Multi-Provider Support**: Routes requests to Daimo Pay (default) and Aqua (Stellar) providers
-- **Chain-Based Routing**: Automatically selects provider based on blockchain chain ID
-- **Format Consistency**: Maintains Daimo Pay API format for all responses
-- **Fallback Support**: Automatic fallback to default provider if primary fails
-- **Health Monitoring**: Built-in health checks for all providers
-- **Comprehensive Logging**: Request/response logging with performance monitoring
-- **Rate Limiting**: Built-in rate limiting for API protection
-- **Security**: Helmet.js security headers and input validation
-
-## Architecture
+This service is deployed as Supabase Edge Functions with the following structure:
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   API Proxy     │    │   Providers     │
-│                 │    │                 │    │                 │
-│ Daimo Pay       │───▶│ Payment Router  │───▶│ Daimo Pay       │
-│ Format          │    │                 │    │ (Ethereum, etc) │
-│                 │    │                 │    │                 │
-│                 │    │ Provider        │    │ Aqua            │
-│                 │    │ Registry        │    │ (Stellar)       │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+supabase/
+├── functions/
+│   ├── payment-api/           # Payment creation & retrieval
+│   ├── webhook-handler/       # Daimo & Aqua webhook processing  
+│   ├── health-check/          # System health & provider status
+│   └── shared/               # Shared utilities & types
+├── migrations/              # Database schema & tables
+└── config.toml             # Supabase configuration
 ```
 
-## Supported Chains
+### 🚀 Edge Functions
 
-### Daimo Pay Provider
-- Ethereum (1)
-- Optimism (10)
-- Polygon (137)
-- Arbitrum (42161)
-- Base (8453)
-- BSC (56)
-- Avalanche (43114)
-- Fantom (250)
-- Filecoin (314)
-- Celo (42220)
-- Gnosis (100)
-- Polygon zkEVM (1101)
-- Linea (59144)
-- Mantle (5000)
-- Scroll (534352)
-- zkSync Era (324)
+| Function | Endpoint | Description |
+|----------|----------|-------------|
+| `payment-api` | `/functions/v1/payment-api` | Create payments, get payment status |
+| `webhook-handler` | `/functions/v1/webhook-handler` | Process Daimo/Aqua webhooks, trigger withdrawals |
+| `health-check` | `/functions/v1/health-check` | System health, provider status |
 
-### Aqua Provider (Stellar)
-- Stellar (10001) - Supports XLM and USDC_XLM tokens
+### 🗄️ Database Schema
 
-## API Endpoints
+- **PostgreSQL** (Supabase built-in)
+- **Row Level Security (RLS)** enabled
+- **Real-time subscriptions** for payment updates
 
-### Create Payment
-```http
-POST /api/payment
+## 📋 Prerequisites
+
+1. **Supabase CLI** installed
+2. **Deno** runtime installed  
+3. **Supabase Project** created
+4. **API Keys** for Daimo and Aqua providers
+
+### Install Supabase CLI
+
+```bash
+# macOS
+brew install supabase/tap/supabase
+
+# Windows (via scoop)
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+
+# npm (cross-platform)
+npm install -g supabase
 ```
 
-**Request Body:**
-```json
+### Install Deno
+
+```bash
+# macOS/Linux
+curl -fsSL https://deno.land/install.sh | sh
+
+# Windows
+iwr https://deno.land/install.ps1 -useb | iex
+```
+
+## 🚀 Deployment Guide
+
+### Step 1: Initialize Supabase Project
+
+```bash
+# Clone this repository
+git clone <your-repo-url>
+cd payment-api-proxy
+
+# Initialize Supabase
+supabase init
+
+# Link to your Supabase project
+supabase link --project-ref <your-project-ref>
+
+# Login to Supabase (if not already)
+supabase login
+```
+
+### Step 2: Set Environment Variables
+
+Create environment secrets in your Supabase dashboard or use CLI:
+
+```bash
+# Core Configuration
+supabase secrets set NODE_ENV=production
+supabase secrets set CORS_ORIGINS="https://yourapp.com,https://yourdomain.com"
+
+# Daimo Provider
+supabase secrets set DAIMO_API_KEY="your-daimo-api-key"
+supabase secrets set DAIMO_BASE_URL="https://pay.daimo.com"
+
+# Aqua Provider  
+supabase secrets set AQUA_BASE_URL="https://api.aqua.network"
+supabase secrets set AQUA_API_TOKEN="your-aqua-api-token"
+supabase secrets set AQUA_WEBHOOK_TOKEN="your-aqua-webhook-token"
+
+# Withdrawal Integration
+supabase secrets set WITHDRAWAL_API_BASE_URL="https://jejdgfzaulaqllyibiyk.supabase.co"
+supabase secrets set WITHDRAWAL_API_JWT_TOKEN="your-withdrawal-jwt-token"
+supabase secrets set WITHDRAWAL_INTEGRATION_ENABLED="true"
+
+# Optional: Logging & Monitoring
+supabase secrets set LOG_LEVEL="info"
+supabase secrets set ENABLE_REQUEST_LOGGING="true"
+```
+
+### Step 3: Deploy Database Schema
+
+```bash
+# Run database migrations
+supabase db push
+
+# Verify tables created
+supabase db status
+```
+
+### Step 4: Deploy Edge Functions
+
+```bash
+# Deploy all functions
+supabase functions deploy payment-api
+supabase functions deploy webhook-handler  
+supabase functions deploy health-check
+
+# Or deploy all at once
+supabase functions deploy
+```
+
+### Step 5: Configure Database Policies
+
+```bash
+# Apply Row Level Security policies
+supabase db reset --linked
+```
+
+### Step 6: Test Deployment
+
+```bash
+# Test health check
+curl https://<your-project-ref>.supabase.co/functions/v1/health-check
+
+# Test payment creation
+curl -X POST https://<your-project-ref>.supabase.co/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "data": {
+      "display": {
+        "intent": "Test payment",
+        "currency": "USD"
+      },
+      "destination": {
+        "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
+        "chainId": "10",
+        "amountUnits": "1000000",
+        "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+      }
+    }
+  }'
+```
+
+## 🔧 Local Development
+
+### Start Local Development Server
+
+```bash
+# Start Supabase locally (includes database + edge functions)
+supabase start
+
+# Your local endpoints will be:
+# API: http://localhost:54321
+# Database: postgresql://postgres:postgres@localhost:54322/postgres
+# Functions: http://localhost:54321/functions/v1/
+```
+
+### Develop Functions Locally
+
+```bash
+# Serve functions locally with hot reload
+supabase functions serve
+
+# Test local function
+curl http://localhost:54321/functions/v1/health-check
+```
+
+### Local Database Management
+
+```bash
+# Reset local database
+supabase db reset
+
+# View database in browser
+supabase dashboard db
+```
+
+## 📡 API Endpoints
+
+### Payment API
+
+#### Create Payment
+```bash
+POST /functions/v1/payment-api
+Content-Type: application/json
+
 {
-  "display": {
-    "intent": "Payment for services",
-    "paymentValue": "10.00",
-    "currency": "USD"
-  },
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "chainId": "1",
-    "amountUnits": "10.00",
-    "tokenSymbol": "ETH",
-    "tokenAddress": "0x0000000000000000000000000000000000000000",
-    "callData": "0x"
-  },
-  "metadata": {
-    "orderId": "12345"
+  "action": "create",
+  "data": {
+    "display": {
+      "intent": "Coffee purchase",
+      "currency": "USD"
+    },
+    "destination": {
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+      "chainId": "10",
+      "amountUnits": "5500000",
+      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    }
   }
 }
 ```
 
-**Response:**
-```json
+#### Get Payment Status
+```bash
+POST /functions/v1/payment-api
+Content-Type: application/json
+
 {
-  "id": "payment-id",
-  "status": "payment_unpaid",
-  "createdAt": "1703123456",
-  "display": {
-    "intent": "Payment for services",
-    "paymentValue": "10.00",
-    "currency": "USD"
-  },
-  "source": null,
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "txHash": null,
-    "chainId": "1",
-    "amountUnits": "10.00",
-    "tokenSymbol": "ETH",
-    "tokenAddress": "0x0000000000000000000000000000000000000000",
-    "callData": "0x"
-  },
-  "metadata": {
-    "orderId": "12345"
-  },
-  "url": "https://checkout.example.com/payment-id"
+  "action": "get",
+  "paymentId": "payment_123",
+  "chainId": "10"
 }
 ```
 
-### Get Payment by ID
-```http
-GET /api/payment/{paymentId}
+### Webhook Handler
+
+#### Daimo Webhook
+```bash
+POST /functions/v1/webhook-handler?provider=daimo
+Content-Type: application/json
+X-Daimo-Signature: sha256=...
+
+{
+  "type": "payment_completed",
+  "paymentId": "payment_123",
+  "chainId": 10,
+  "txHash": "0x...",
+  "payment": { ... }
+}
 ```
 
-### Get Payment by External ID
-```http
-GET /api/payment/external-id/{externalId}
+#### Aqua Webhook  
+```bash
+POST /functions/v1/webhook-handler?provider=aqua&token=your-webhook-token
+Content-Type: application/json
+
+{
+  "invoice_id": "aqua_invoice_123",
+  "status": "paid",
+  "amount": 100.50,
+  "address": "GXXXXXXX...",
+  "token_id": "usdc",
+  "transaction_hash": "stellar_tx_hash"
+}
 ```
 
 ### Health Check
-```http
-GET /health
-```
-
-### Provider Status
-```http
-GET /api/providers/status
-```
-
-### Routing Statistics
-```http
-GET /api/routing/stats
-```
-
-## Environment Variables
-
-Create a `.env` file or use `env.dev` for development:
-
-```env
-# Server Configuration
-PORT=3000
-NODE_ENV=development
-
-# Provider Configuration
-DAIMO_BASE_URL=https://api.daimo.com
-DAIMO_API_KEY=your-daimo-api-key
-DAIMO_TIMEOUT=30000
-DAIMO_RETRIES=3
-
-AQUA_BASE_URL=https://api.aqua.com
-AQUA_TIMEOUT=30000
-AQUA_RETRIES=3
-
-# Security
-ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
-
-# Routing
-DEFAULT_PROVIDER=daimo
-ENABLE_FALLBACK=true
-MAX_RETRIES=3
-TIMEOUT=30000
-ENABLE_HEALTH_CHECKS=true
-HEALTH_CHECK_INTERVAL=60000
-```
-
-## Installation
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd api-proxy
-```
+GET /functions/v1/health-check
 
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Set up environment variables:
-```bash
-cp env.dev .env
-# Edit .env with your configuration
-```
-
-4. Build the project:
-```bash
-npm run build
-```
-
-5. Start the server:
-```bash
-npm start
-```
-
-## Development
-
-### Running in Development Mode
-```bash
-npm run dev
-```
-
-### Running with Environment File
-```bash
-npm run dev:env
-```
-
-### Type Checking
-```bash
-npm run type-check
-```
-
-### Building
-```bash
-npm run build
-```
-
-## Testing
-
-### Run All Tests
-```bash
-npm test
-```
-
-### Run Tests in Watch Mode
-```bash
-npm run test:watch
-```
-
-### Run Tests with Coverage
-```bash
-npm run test:coverage
-```
-
-### Run Integration Tests Only
-```bash
-npm run test:integration
-```
-
-## Project Structure
-
-```
-src/
-├── config/           # Configuration files
-│   ├── chains.ts     # Chain definitions
-│   ├── providers.ts  # Provider configurations
-│   ├── routing.ts    # Routing rules
-│   └── index.ts      # Config exports
-├── providers/        # Provider implementations
-│   ├── base-provider.ts    # Abstract base provider
-│   ├── daimo-provider.ts   # Daimo Pay provider
-│   ├── aqua-provider.ts    # Aqua provider
-│   ├── registry.ts         # Provider registry
-│   └── index.ts           # Provider exports
-├── routing/          # Routing engine
-│   └── router.ts     # Main router
-├── types/            # TypeScript type definitions
-│   ├── api.ts        # API types
-│   ├── payment.ts    # Payment types
-│   └── provider.ts   # Provider types
-├── utils/            # Utility functions
-│   └── transformation.ts  # Request/response transformers
-├── middleware/       # Express middleware
-│   ├── error-handler.ts   # Error handling
-│   └── logging.ts         # Logging middleware
-├── tests/            # Test files
-│   ├── setup.ts           # Test setup
-│   └── integration.test.ts # Integration tests
-└── server.ts         # Main server file
-```
-
-## Provider Integration
-
-### Adding a New Provider
-
-1. Create a new provider class extending `BaseProvider`:
-```typescript
-export class NewProvider extends BaseProvider {
-  async createPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
-    // Implementation
-  }
-  
-  async getPayment(paymentId: string): Promise<PaymentResponse> {
-    // Implementation
-  }
-  
-  async getPaymentByExternalId(externalId: string): Promise<PaymentResponse> {
-    // Implementation
-  }
-}
-```
-
-2. Add provider configuration in `src/config/providers.ts`
-
-3. Add routing rules in `src/config/routing.ts`
-
-4. Register the provider in `src/server.ts`
-
-### Aqua Provider Integration
-
-The Aqua provider is currently a placeholder implementation. To integrate with the actual Aqua API:
-
-1. Update `src/providers/aqua-provider.ts` with actual API calls
-2. Implement proper response transformation
-3. Add authentication if required
-4. Update health check implementation
-
-## Error Handling
-
-The API uses standardized error responses:
-
-```json
+# Response
 {
-  "error": "Payment processing failed",
-  "message": "An error occurred while processing the payment",
-  "details": {
-    "provider": "daimo",
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "errorType": "ValidationError",
-    "statusCode": 400,
-    "responseData": {}
+  "status": "healthy",
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "database": "connected",
+  "providers": {
+    "daimo": "healthy",
+    "aqua": "healthy"
+  },
+  "withdrawal_integration": {
+    "status": "healthy",
+    "enabled": true
   }
 }
 ```
 
-## Monitoring and Logging
+## 🗄️ Database Schema
 
-### Request Logging
-All requests are logged with:
-- Method and path
-- IP address
-- User agent
-- Response time
-- Status code
+### Tables
 
-### Performance Monitoring
-- Slow request detection (>1s)
-- Very slow request alerts (>5s)
-- Response time tracking
+#### payments
+```sql
+CREATE TABLE payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  amount DECIMAL(20,8) NOT NULL,
+  currency TEXT NOT NULL,
+  status payment_status NOT NULL DEFAULT 'payment_unpaid',
+  external_id TEXT,
+  withdraw_id TEXT,
+  provider_name TEXT NOT NULL,
+  chain_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  status_updated_at TIMESTAMPTZ DEFAULT now(),
+  provider_response JSONB,
+  metadata JSONB,
+  original_request JSONB NOT NULL
+);
+```
 
-### Security Logging
-- Potential security threats detection
-- Suspicious pattern matching
-- Rate limiting violations
+#### Payment Status Enum
+```sql
+CREATE TYPE payment_status AS ENUM (
+  'payment_unpaid',
+  'payment_started', 
+  'payment_completed',
+  'payment_bounced',
+  'payment_refunded'
+);
+```
 
-## Health Checks
+### Row Level Security (RLS)
 
-### Provider Health
-Each provider implements health checks:
-- HTTP endpoint availability
-- Response time monitoring
-- Error rate tracking
+- **payments**: Public read access for valid payment IDs
+- **Real-time**: Enabled for payment status updates
+- **API Keys**: Function-level authentication
 
-### System Health
-Overall system health includes:
-- Provider status
-- Routing statistics
-- System uptime
-- Memory usage
+## 🔄 Automatic Withdrawal Integration
 
-## Rate Limiting
+### Flow
+```
+USDC Stellar Payment Completed (Webhook)
+    ↓
+Eligibility Check (USDC + Stellar + Aqua provider)
+    ↓
+POST to External Withdrawal API
+    ↓
+Save withdraw_id to payment record
+    ↓
+Log Success/Failure
+```
 
-Built-in rate limiting:
-- 100 requests per 15 minutes per IP
-- Configurable limits
-- Custom error responses
+### Supported Conversions
+- **USDC Stellar → USDC Base** ✅
+- **Future**: USDC Stellar → USDC Solana
 
-## Security Features
+## 📊 Monitoring & Observability
 
-- Helmet.js security headers
-- CORS configuration
-- Input validation and sanitization
-- Rate limiting
-- Security logging
-- Request size limits
+### Logs
+```bash
+# View function logs
+supabase functions logs payment-api
+supabase functions logs webhook-handler
+supabase functions logs health-check
 
-## Contributing
+# Real-time logs
+supabase functions logs --follow
+```
+
+### Metrics
+- Function invocation count
+- Error rates
+- Response times
+- Database query performance
+
+### Alerts
+- Payment processing failures
+- Webhook delivery failures  
+- Provider API downtime
+- Withdrawal integration errors
+
+## 🔒 Security Features
+
+### Authentication & Authorization
+- **API Key Authentication**: For payment creation
+- **Webhook Verification**: Signature validation (Daimo) + Token auth (Aqua)
+- **Row Level Security**: Database-level access control
+- **CORS**: Configurable allowed origins
+
+### Rate Limiting
+- **Built-in**: Supabase Edge Functions rate limiting
+- **Custom**: Additional rate limiting for webhook endpoints
+- **DDoS Protection**: Supabase infrastructure-level protection
+
+## 🚀 Production Checklist
+
+### Pre-Deployment
+- [ ] Environment secrets configured
+- [ ] Database migrations applied
+- [ ] RLS policies enabled
+- [ ] CORS origins configured
+- [ ] API keys obtained from providers
+
+### Post-Deployment  
+- [ ] Health check passing
+- [ ] Test payment flow end-to-end
+- [ ] Webhook endpoints responding
+- [ ] Withdrawal integration working
+- [ ] Monitoring dashboards configured
+- [ ] Log aggregation setup
+
+### Ongoing Maintenance
+- [ ] Monitor function performance
+- [ ] Review error logs regularly  
+- [ ] Update provider API configurations
+- [ ] Scale function resources as needed
+- [ ] Regular database maintenance
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### Function Deployment Fails
+```bash
+# Check function syntax
+deno check supabase/functions/payment-api/index.ts
+
+# View deployment logs
+supabase functions logs payment-api --level error
+```
+
+#### Database Connection Issues
+```bash
+# Check database status
+supabase db status
+
+# Reset database
+supabase db reset --linked
+```
+
+#### Provider API Errors
+```bash
+# Test provider connectivity
+curl -H "Authorization: Bearer $DAIMO_API_KEY" https://pay.daimo.com/health
+
+# Check environment secrets
+supabase secrets list
+```
+
+#### Webhook Processing Failures
+```bash
+# View webhook logs
+supabase functions logs webhook-handler
+
+# Test webhook manually
+curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo \
+  -H "Content-Type: application/json" \
+  -d '{"type":"payment_completed","paymentId":"test"}'
+```
+
+## 📚 Additional Resources
+
+- [Supabase Edge Functions Documentation](https://supabase.com/docs/guides/functions)
+- [Deno Runtime Documentation](https://deno.land/manual)  
+- [Daimo Pay API Documentation](https://paydocs.daimo.com/)
+- [Aqua Payment Documentation](./aqua.md)
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run the test suite
-6. Submit a pull request
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Test locally with `supabase start`
+4. Commit changes (`git commit -m 'Add amazing feature'`)
+5. Push to branch (`git push origin feature/amazing-feature`)
+6. Open Pull Request
 
-## License
+## 📄 License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🚀 Quick Start Commands
+
+```bash
+# Complete deployment in one go
+git clone <repo> && cd payment-api-proxy
+supabase init && supabase link --project-ref <your-ref>
+supabase secrets set DAIMO_API_KEY="your-key" AQUA_API_TOKEN="your-token"
+supabase db push && supabase functions deploy
+curl https://<your-ref>.supabase.co/functions/v1/health-check
+```
+
+You're now ready to process payments through multiple blockchain networks with automatic withdrawal integration! 🎉
