@@ -24,7 +24,7 @@ export class AquaProvider extends BaseProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
+          token: `${this.config.apiKey}`,
         },
         body: JSON.stringify(aquaRequest),
       });
