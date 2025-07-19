@@ -100,7 +100,7 @@ supabase secrets set AQUA_API_TOKEN="your-aqua-api-token"
 supabase secrets set AQUA_WEBHOOK_TOKEN="your-aqua-webhook-token"
 
 # Withdrawal Integration
-supabase secrets set WITHDRAWAL_API_BASE_URL="https://jejdgfzaulaqllyibiyk.supabase.co"
+supabase secrets set WITHDRAWAL_API_BASE_URL="https://proj-ref.supabase.co"
 supabase secrets set WITHDRAWAL_API_JWT_TOKEN="your-withdrawal-jwt-token"
 supabase secrets set WITHDRAWAL_INTEGRATION_ENABLED="true"
 
