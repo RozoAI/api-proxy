@@ -40,6 +40,7 @@ export class PaymentDatabase {
       provider_response: paymentResponse,
       metadata: paymentRequest.metadata || null,
       original_request: paymentRequest,
+      app_id: paymentRequest.appId || null, // Add appId to database
     };
 
     const { data, error } = await this.supabase
@@ -86,6 +87,21 @@ export class PaymentDatabase {
     }
 
     return data;
+  }
+
+  async getPaymentsByAppId(appId: string): Promise<PaymentRecord[]> {
+    const { data, error } = await this.supabase
+      .from('payments')
+      .select('*')
+      .eq('app_id', appId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[Database] Error getting payments by app ID:', error);
+      throw new Error(`Failed to get payments: ${error.message}`);
+    }
+
+    return data || [];
   }
 
   async updatePaymentStatus(
@@ -162,6 +178,7 @@ export class PaymentDatabase {
       destination: record.original_request.destination,
       externalId: record.external_id,
       metadata: record.metadata || null,
+      appId: record.app_id || undefined, // Include appId in response
     };
   }
 
