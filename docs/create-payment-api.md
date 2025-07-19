@@ -520,7 +520,5 @@ payment = create_payment({
 
 - [Get Payment by ID](./get-payment-api.md)
 - [Get Payment by External ID](./get-payment-external-api.md)
-- [Get App Configuration](./get-app-config-api.md)
-- [Get All App Configurations](./get-all-app-configs-api.md)
 - [Webhook Handler](./webhook-handler-api.md)
 - [Health Check](./health-check-api.md) 
