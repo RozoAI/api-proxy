@@ -12,6 +12,8 @@ POST /functions/v1/payment-api
 
 The Create Payment API allows you to create payment requests that are automatically routed to the appropriate blockchain provider (Daimo or Aqua) based on the specified chain ID. The API maintains a consistent Daimo Pay format for all responses while supporting multiple blockchain networks.
 
+**New Feature**: The API now supports `appId` configuration, allowing different applications to have their own payout addresses and token configurations.
+
 ## Request Format
 
 ### Headers
@@ -30,13 +32,14 @@ Authorization: Bearer YOUR_API_KEY (optional)
     currency: string;         // Currency code (e.g., "USD", "EUR")
   };
   destination: {
-    destinationAddress: string;  // Recipient address
+    destinationAddress?: string;  // Recipient address (optional if appId provided)
     chainId: string;            // Blockchain chain ID
     amountUnits: string;        // Payment amount (must be > 0)
     tokenSymbol?: string;       // Token symbol (required for Aqua)
     tokenAddress?: string;      // Token contract address (required for EVM chains)
   };
   metadata?: object;            // Optional additional data
+  appId?: string;               // Application ID for payout configuration
 }
 ```
 
@@ -46,12 +49,45 @@ Authorization: Bearer YOUR_API_KEY (optional)
 |-------|------|----------|-------------|---------|
 | `display.intent` | string | ✅ | Human-readable payment description | "Coffee purchase" |
 | `display.currency` | string | ✅ | Currency code | "USD", "EUR" |
-| `destination.destinationAddress` | string | ✅ | Recipient address | "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6" |
+| `destination.destinationAddress` | string | ❌ | Recipient address (auto-filled from appId) | "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6" |
 | `destination.chainId` | string | ✅ | Blockchain chain ID | "1", "10", "10001" |
 | `destination.amountUnits` | string | ✅ | Payment amount (must be > 0) | "10.50" |
 | `destination.tokenSymbol` | string | ❌ | Token symbol | "ETH", "USDC", "XLM" |
 | `destination.tokenAddress` | string | ❌ | Token contract address | "0x0000000000000000000000000000000000000000" |
 | `metadata` | object | ❌ | Additional payment metadata | `{"orderId": "12345"}` |
+| `appId` | string | ❌ | Application ID for payout config | "rozoDemoStellar" |
+
+## AppId Configuration
+
+### Supported App IDs
+
+| App ID | Name | Payout Token | Payout Address | Payout Chain |
+|--------|------|--------------|----------------|--------------|
+| `rozoDemoStellar` | Rozo Demo Stellar | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+| `rozopayStellar` | Rozo Pay Stellar | USDC_BASE | `0x5772FBe7a7817ef7F586215CA8b23b8dD22C8897` | Base (8453) |
+| `rozoInvoiceStellar` | Rozo Invoice Stellar | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+| `rozoInvoice` | Rozo Invoice | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+| `rozoDemo` | Rozo Demo | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+| `rozoTestStellar` | Rozo Test Stellar | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+| `rozoTest` | Rozo Test | Stellar | `GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ` | Stellar (10001) |
+
+### Domain to App ID Mapping
+
+| Domain | Default App ID |
+|--------|----------------|
+| `invoice.rozo.ai` | `rozoInvoiceStellar` |
+| `demo.rozo.ai` | `rozoDemoStellar` |
+| `test.rozo.ai` | `rozoTestStellar` |
+| Default | `rozoTestStellar` |
+
+### AppId Behavior
+
+When `appId` is provided:
+
+1. **Automatic Payout Address**: If `destinationAddress` is not provided, the app's payout address is automatically used
+2. **Token Configuration**: App-specific token configurations are applied
+3. **Metadata Tracking**: App information is added to payment metadata
+4. **Validation**: App ID is validated and app must be enabled
 
 ## Supported Chains and Providers
 
@@ -106,9 +142,13 @@ Authorization: Bearer YOUR_API_KEY (optional)
   },
   "externalId": "ext_123",
   "metadata": {
-    "orderId": "12345"
+    "orderId": "12345",
+    "appId": "rozoDemoStellar",
+    "payoutToken": "stellar",
+    "payoutAddress": "GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ"
   },
-  "url": "https://checkout.example.com/payment_abc123"
+  "url": "https://checkout.example.com/payment_abc123",
+  "appId": "rozoDemoStellar"
 }
 ```
 
@@ -123,8 +163,9 @@ Authorization: Bearer YOUR_API_KEY (optional)
 | `source` | object/null | Source payment details (null until payment starts) |
 | `destination` | object | Destination payment details |
 | `externalId` | string/null | External provider payment ID |
-| `metadata` | object | Payment metadata |
+| `metadata` | object | Payment metadata (includes appId info) |
 | `url` | string | Payment checkout URL |
+| `appId` | string | Application ID used for this payment |
 
 ### Payment Status Values
 
@@ -141,12 +182,16 @@ Authorization: Bearer YOUR_API_KEY (optional)
 ```json
 {
   "error": "Validation failed",
-  "message": "Amount must be a positive number",
-  "details": {
-    "field": "destination.amountUnits",
-    "code": "INVALID_AMOUNT",
-    "provider": "daimo"
-  }
+  "message": "Invalid appId: invalidAppId"
+}
+```
+
+### App Disabled Error (400)
+
+```json
+{
+  "error": "Payment creation failed",
+  "message": "App rozoDemoStellar is disabled"
 }
 ```
 
@@ -179,7 +224,7 @@ Authorization: Bearer YOUR_API_KEY (optional)
 
 ## Examples
 
-### Example 1: Ethereum Payment (Daimo)
+### Example 1: Payment with AppId (Automatic Payout Address)
 
 **Request:**
 ```bash
@@ -191,66 +236,14 @@ curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
       "currency": "USD"
     },
     "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-      "chainId": "1",
+      "chainId": "10001",
       "amountUnits": "5.50",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+      "tokenSymbol": "XLM"
     },
+    "appId": "rozoDemoStellar",
     "metadata": {
       "store": "Starbucks Downtown",
       "orderId": "SB-12345"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "id": "daimo_1699123456789_abc123def",
-  "status": "payment_unpaid",
-  "createdAt": "1699123456789",
-  "display": {
-    "intent": "Coffee purchase at Starbucks",
-    "currency": "USD"
-  },
-  "source": null,
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "txHash": null,
-    "chainId": "1",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-  "externalId": "starbucks_order_12345",
-  "metadata": {
-    "store": "Starbucks Downtown",
-    "orderId": "SB-12345"
-  },
-  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
-}
-```
-
-### Example 2: Stellar Payment (Aqua)
-
-**Request:**
-```bash
-curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
-  -H "Content-Type: application/json" \
-  -d '{
-    "display": {
-      "intent": "Stellar XLM transfer to friend",
-      "currency": "USD"
-    },
-    "destination": {
-      "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-      "chainId": "10001",
-      "amountUnits": "25.00",
-      "tokenSymbol": "XLM"
-    },
-    "metadata": {
-      "purpose": "Birthday gift",
-      "recipient": "Alice Johnson"
     }
   }'
 ```
@@ -262,25 +255,133 @@ curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
   "status": "payment_unpaid",
   "createdAt": "1699123456000",
   "display": {
-    "intent": "Stellar XLM transfer to friend",
+    "intent": "Coffee purchase at Starbucks",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
+    "destinationAddress": "GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ",
     "txHash": null,
     "chainId": "10001",
-    "amountUnits": "25.00",
+    "amountUnits": "5.50",
     "tokenSymbol": "XLM",
     "tokenAddress": ""
   },
-  "externalId": "friend_transfer_789",
+  "externalId": "starbucks_order_12345",
   "metadata": {
-    "purpose": "Birthday gift",
-    "recipient": "Alice Johnson",
-    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789"
+    "store": "Starbucks Downtown",
+    "orderId": "SB-12345",
+    "appId": "rozoDemoStellar",
+    "payoutToken": "stellar",
+    "payoutAddress": "GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ"
   },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
+  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789",
+  "appId": "rozoDemoStellar"
+}
+```
+
+### Example 2: Payment with Custom Address (AppId for Tracking)
+
+**Request:**
+```bash
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {
+      "intent": "Custom payment",
+      "currency": "USD"
+    },
+    "destination": {
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+      "chainId": "1",
+      "amountUnits": "10.00",
+      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    },
+    "appId": "rozopayStellar",
+    "metadata": {
+      "orderId": "CUSTOM-123"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "daimo_1699123456789_abc123def",
+  "status": "payment_unpaid",
+  "createdAt": "1699123456789",
+  "display": {
+    "intent": "Custom payment",
+    "currency": "USD"
+  },
+  "source": null,
+  "destination": {
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "txHash": null,
+    "chainId": "1",
+    "amountUnits": "10.00",
+    "tokenSymbol": "USDC",
+    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+  },
+  "externalId": "custom_order_123",
+  "metadata": {
+    "orderId": "CUSTOM-123",
+    "appId": "rozopayStellar",
+    "payoutToken": "USDC_BASE",
+    "payoutAddress": "0x5772FBe7a7817ef7F586215CA8b23b8dD22C8897"
+  },
+  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def",
+  "appId": "rozopayStellar"
+}
+```
+
+### Example 3: Payment without AppId (Uses Default)
+
+**Request:**
+```bash
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {
+      "intent": "Test payment",
+      "currency": "USD"
+    },
+    "destination": {
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+      "chainId": "1",
+      "amountUnits": "1.00",
+      "tokenAddress": "0x0000000000000000000000000000000000000000"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "daimo_1699123456789_def456ghi",
+  "status": "payment_unpaid",
+  "createdAt": "1699123456789",
+  "display": {
+    "intent": "Test payment",
+    "currency": "USD"
+  },
+  "source": null,
+  "destination": {
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "txHash": null,
+    "chainId": "1",
+    "amountUnits": "1.00",
+    "tokenSymbol": "ETH",
+    "tokenAddress": "0x0000000000000000000000000000000000000000"
+  },
+  "externalId": "test_payment_456",
+  "metadata": {
+    "appId": "rozoTestStellar",
+    "payoutToken": "stellar",
+    "payoutAddress": "GC6XX3QMCPFE6WTCG6QQKRKT47UB6C53RPN4RA47IISEUC5N5CRANSIJ"
+  },
+  "url": "https://pay.daimo.com/link/daimo_1699123456789_def456ghi",
+  "appId": "rozoTestStellar"
 }
 ```
 
@@ -304,6 +405,11 @@ curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
 - **EVM chains**: `tokenAddress` is required and must be valid contract address
 - **Stellar**: `tokenSymbol` is required and must be supported (XLM, USDC_XLM)
 
+### AppId Validation
+- Must be a valid app ID from the supported list
+- App must be enabled
+- If not provided, defaults to `rozoTestStellar`
+
 ## Rate Limiting
 
 - **Limit**: 100 requests per minute per IP address
@@ -318,6 +424,8 @@ curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
 4. **Handle webhook notifications** for payment status updates
 5. **Implement retry logic** for failed requests
 6. **Store payment IDs** for future reference
+7. **Use appId for automatic payout configuration**
+8. **Validate appId** before making requests
 
 ## SDK Examples
 
@@ -330,13 +438,14 @@ interface CreatePaymentRequest {
     currency: string;
   };
   destination: {
-    destinationAddress: string;
+    destinationAddress?: string;
     chainId: string;
     amountUnits: string;
     tokenSymbol?: string;
     tokenAddress?: string;
   };
   metadata?: Record<string, any>;
+  appId?: string;
 }
 
 async function createPayment(paymentData: CreatePaymentRequest) {
@@ -356,18 +465,18 @@ async function createPayment(paymentData: CreatePaymentRequest) {
   return response.json();
 }
 
-// Example usage
+// Example usage with appId
 const payment = await createPayment({
   display: {
     intent: "Coffee purchase",
     currency: "USD"
   },
   destination: {
-    destinationAddress: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    chainId: "1",
+    chainId: "10001",
     amountUnits: "5.50",
-    tokenAddress: "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    tokenSymbol: "XLM"
   },
+  appId: "rozoDemoStellar",
   metadata: {
     orderId: "12345"
   }
@@ -389,18 +498,18 @@ def create_payment(payment_data: Dict[str, Any]) -> Dict[str, Any]:
     response.raise_for_status()
     return response.json()
 
-# Example usage
+# Example usage with appId
 payment = create_payment({
     "display": {
         "intent": "Coffee purchase",
         "currency": "USD"
     },
     "destination": {
-        "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-        "chainId": "1",
+        "chainId": "10001",
         "amountUnits": "5.50",
-        "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+        "tokenSymbol": "XLM"
     },
+    "appId": "rozoDemoStellar",
     "metadata": {
         "orderId": "12345"
     }
@@ -411,5 +520,7 @@ payment = create_payment({
 
 - [Get Payment by ID](./get-payment-api.md)
 - [Get Payment by External ID](./get-payment-external-api.md)
+- [Get App Configuration](./get-app-config-api.md)
+- [Get All App Configurations](./get-all-app-configs-api.md)
 - [Webhook Handler](./webhook-handler-api.md)
 - [Health Check](./health-check-api.md) 
