@@ -1,78 +1,114 @@
-# Create Payment API Documentation
+# Create Payment API
 
-## Overview
-Creates a new payment request through the Payment API Proxy. The API automatically routes the request to the appropriate provider (Daimo or Aqua) based on the chain ID.
+This document provides detailed information about the payment creation endpoint in the Payment API Proxy.
 
 ## Endpoint
+
 ```
-POST /api/payment
+POST /functions/v1/payment-api
 ```
+
+## Overview
+
+The Create Payment API allows you to create payment requests that are automatically routed to the appropriate blockchain provider (Daimo or Aqua) based on the specified chain ID. The API maintains a consistent Daimo Pay format for all responses while supporting multiple blockchain networks.
 
 ## Request Format
 
+### Headers
+
+```
+Content-Type: application/json
+Authorization: Bearer YOUR_API_KEY (optional)
+```
+
 ### Request Body Schema
-```json
+
+```typescript
 {
-  "display": {
-    "intent": "string",
-    "currency": "string"
-  },
-  "destination": {
-    "destinationAddress": "string",
-    "chainId": "string", 
-    "amountUnits": "string",
-    "tokenSymbol": "string",
-    "tokenAddress": "string"
-  },
-  "metadata": {}
+  display: {
+    intent: string;           // Human-readable payment description
+    currency: string;         // Currency code (e.g., "USD", "EUR")
+  };
+  destination: {
+    destinationAddress: string;  // Recipient address
+    chainId: string;            // Blockchain chain ID
+    amountUnits: string;        // Payment amount (must be > 0)
+    tokenSymbol?: string;       // Token symbol (required for Aqua)
+    tokenAddress?: string;      // Token contract address (required for EVM chains)
+  };
+  metadata?: object;            // Optional additional data
 }
 ```
 
 ### Field Descriptions
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `display.intent` | string | Yes | Human-readable description of the payment |
-| `display.currency` | string | Yes | Currency code (e.g., "USD", "EUR") |
-| `destination.destinationAddress` | string | Yes | Recipient wallet address |
-| `destination.chainId` | string | Yes | Blockchain chain ID (determines provider routing) |
-| `destination.amountUnits` | string | Yes | Payment amount in regular decimal units (e.g., "10.50") |
-| `destination.tokenSymbol` | string | Conditional | Token symbol (required for Aqua/Stellar chains) |
-| `destination.tokenAddress` | string | Conditional | Token contract address (required for Daimo/EVM chains) |
-| `metadata` | object | No | Additional metadata for the payment |
+| Field | Type | Required | Description | Example |
+|-------|------|----------|-------------|---------|
+| `display.intent` | string | ✅ | Human-readable payment description | "Coffee purchase" |
+| `display.currency` | string | ✅ | Currency code | "USD", "EUR" |
+| `destination.destinationAddress` | string | ✅ | Recipient address | "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6" |
+| `destination.chainId` | string | ✅ | Blockchain chain ID | "1", "10", "10001" |
+| `destination.amountUnits` | string | ✅ | Payment amount (must be > 0) | "10.50" |
+| `destination.tokenSymbol` | string | ❌ | Token symbol | "ETH", "USDC", "XLM" |
+| `destination.tokenAddress` | string | ❌ | Token contract address | "0x0000000000000000000000000000000000000000" |
+| `metadata` | object | ❌ | Additional payment metadata | `{"orderId": "12345"}` |
 
-### Amount Units Format
-- **Regular decimal units**: Use standard decimal notation (e.g., "1.00", "10.50", "0.01")
-- **Precision**: Must match the token's supported decimal places
-- **Examples**: 
-  - USDC: "10.50" (6 decimal places supported)
-  - ETH: "0.001" (18 decimal places supported)
-  - XLM: "25.00" (7 decimal places supported)
+## Supported Chains and Providers
+
+### Daimo Provider (EVM Chains)
+
+| Chain | ID | Name | Required Fields | Supported Tokens |
+|-------|----|------|-----------------|------------------|
+| Ethereum | `1` | Ethereum Mainnet | `tokenAddress` | ETH, USDC, USDT, etc. |
+| Optimism | `10` | Optimism | `tokenAddress` | ETH, USDC, USDT, etc. |
+| Polygon | `137` | Polygon | `tokenAddress` | MATIC, USDC, USDT, etc. |
+| Arbitrum | `42161` | Arbitrum One | `tokenAddress` | ETH, USDC, USDT, etc. |
+| Base | `8453` | Base | `tokenAddress` | ETH, USDC, USDT, etc. |
+| BSC | `56` | BNB Smart Chain | `tokenAddress` | BNB, USDC, USDT, etc. |
+| Avalanche | `43114` | Avalanche | `tokenAddress` | AVAX, USDC, USDT, etc. |
+| Fantom | `250` | Fantom | `tokenAddress` | FTM, USDC, USDT, etc. |
+| Filecoin | `314` | Filecoin | `tokenAddress` | FIL, USDC, USDT, etc. |
+| Celo | `42220` | Celo | `tokenAddress` | CELO, USDC, USDT, etc. |
+| Gnosis | `100` | Gnosis | `tokenAddress` | xDAI, USDC, USDT, etc. |
+| Polygon zkEVM | `1101` | Polygon zkEVM | `tokenAddress` | ETH, USDC, USDT, etc. |
+| Linea | `59144` | Linea | `tokenAddress` | ETH, USDC, USDT, etc. |
+| Mantle | `5000` | Mantle | `tokenAddress` | MNT, USDC, USDT, etc. |
+| Scroll | `534352` | Scroll | `tokenAddress` | ETH, USDC, USDT, etc. |
+| zkSync | `324` | zkSync Era | `tokenAddress` | ETH, USDC, USDT, etc. |
+
+### Aqua Provider (Stellar)
+
+| Chain | ID | Name | Required Fields | Supported Tokens |
+|-------|----|------|-----------------|------------------|
+| Stellar | `10001` | Stellar | `tokenSymbol` | XLM, USDC_XLM |
 
 ## Response Format
 
-### Success Response Schema
+### Success Response (201)
+
 ```json
 {
-  "id": "string",
-  "status": "string",
-  "createdAt": "string",
+  "id": "payment_abc123",
+  "status": "payment_unpaid",
+  "createdAt": "1703123456",
   "display": {
-    "intent": "string",
-    "currency": "string"
+    "intent": "Payment for services",
+    "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "string",
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
     "txHash": null,
-    "chainId": "string",
-    "amountUnits": "string",
-    "tokenSymbol": "string",
-    "tokenAddress": "string"
+    "chainId": "1",
+    "amountUnits": "10.00",
+    "tokenSymbol": "ETH",
+    "tokenAddress": "0x0000000000000000000000000000000000000000"
   },
-  "externalId": "string",
-  "metadata": {},
-  "url": "string"
+  "externalId": "ext_123",
+  "metadata": {
+    "orderId": "12345"
+  },
+  "url": "https://checkout.example.com/payment_abc123"
 }
 ```
 
@@ -81,98 +117,152 @@ POST /api/payment
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Unique payment identifier |
-| `status` | string | Payment status (payment_unpaid, payment_started, payment_completed, payment_bounced) |
-| `createdAt` | string | Payment creation timestamp |
-| `display.intent` | string | Human-readable payment description |
-| `display.currency` | string | Payment currency |
-| `source` | object\|null | Source payment details (null until payment initiated) |
-| `source.amountUnits` | string | Source amount in regular decimal units |
+| `status` | string | Current payment status |
+| `createdAt` | string | Payment creation timestamp (Unix) |
+| `display` | object | Payment display information |
+| `source` | object/null | Source payment details (null until payment starts) |
 | `destination` | object | Destination payment details |
-| `destination.amountUnits` | string | Destination amount in regular decimal units |
-| `destination.txHash` | string\|null | Transaction hash (null until completed) |
-| `externalId` | string\|null | External reference ID |
+| `externalId` | string/null | External provider payment ID |
 | `metadata` | object | Payment metadata |
-| `url` | string | Payment URL for user interaction |
+| `url` | string | Payment checkout URL |
+
+### Payment Status Values
+
+- `payment_unpaid` - Payment created but not yet initiated
+- `payment_started` - Payment has been initiated but not completed
+- `payment_completed` - Payment has been successfully completed
+- `payment_bounced` - Payment failed or was rejected
+- `payment_refunded` - Payment has been refunded
+
+## Error Responses
+
+### Validation Error (400)
+
+```json
+{
+  "error": "Validation failed",
+  "message": "Amount must be a positive number",
+  "details": {
+    "field": "destination.amountUnits",
+    "code": "INVALID_AMOUNT",
+    "provider": "daimo"
+  }
+}
+```
+
+### Provider Error (502)
+
+```json
+{
+  "error": "Provider unavailable",
+  "message": "Daimo Pay service is currently unavailable",
+  "details": {
+    "provider": "daimo",
+    "code": "PROVIDER_UNAVAILABLE",
+    "timestamp": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Internal Error (500)
+
+```json
+{
+  "error": "Internal server error",
+  "message": "An unexpected error occurred",
+  "details": {
+    "code": "INTERNAL_ERROR",
+    "timestamp": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
 
 ## Examples
 
-### Example 1: Ethereum USDC Payment (Daimo Provider)
+### Example 1: Ethereum Payment (Daimo)
 
-#### Request
+**Request:**
 ```bash
-curl -X POST http://localhost:3002/api/payment \
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
-      "intent": "Coffee purchase",
+      "intent": "Coffee purchase at Starbucks",
       "currency": "USD"
     },
     "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-      "chainId": "10",
-      "amountUnits": "5.00",
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+      "chainId": "1",
+      "amountUnits": "5.50",
       "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     },
+    "metadata": {
+      "store": "Starbucks Downtown",
+      "orderId": "SB-12345"
+    }
   }'
 ```
 
-#### Response
+**Response:**
 ```json
 {
   "id": "daimo_1699123456789_abc123def",
-  "status": "payment_unpaid", 
+  "status": "payment_unpaid",
   "createdAt": "1699123456789",
   "display": {
-    "intent": "Coffee purchase",
+    "intent": "Coffee purchase at Starbucks",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
     "txHash": null,
-    "chainId": "10",
-    "amountUnits": "5.00",
+    "chainId": "1",
+    "amountUnits": "5.50",
     "tokenSymbol": "USDC",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
-  "externalId": "coffee_order_123",
+  "externalId": "starbucks_order_12345",
   "metadata": {
-    "provider": "daimo"
+    "store": "Starbucks Downtown",
+    "orderId": "SB-12345"
   },
   "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
 }
 ```
 
----
+### Example 2: Stellar Payment (Aqua)
 
-### Example 2: Stellar XLM Payment (Aqua Provider)
-
-#### Request
+**Request:**
 ```bash
-curl -X POST http://localhost:3002/api/payment \
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
-      "intent": "Stellar transfer",
+      "intent": "Stellar XLM transfer to friend",
       "currency": "USD"
     },
     "destination": {
       "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
       "chainId": "10001",
-      "amountUnits": "1.00",
+      "amountUnits": "25.00",
       "tokenSymbol": "XLM"
     },
+    "metadata": {
+      "purpose": "Birthday gift",
+      "recipient": "Alice Johnson"
+    }
   }'
 ```
 
-#### Response
+**Response:**
 ```json
 {
   "id": "aqua_invoice_1699123456_xyz789",
   "status": "payment_unpaid",
   "createdAt": "1699123456000",
   "display": {
-    "intent": "Stellar transfer",
+    "intent": "Stellar XLM transfer to friend",
     "currency": "USD"
   },
   "source": null,
@@ -180,16 +270,146 @@ curl -X POST http://localhost:3002/api/payment \
     "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
     "txHash": null,
     "chainId": "10001",
-    "amountUnits": "1.00",
+    "amountUnits": "25.00",
     "tokenSymbol": "XLM",
     "tokenAddress": ""
   },
-  "externalId": "stellar_transfer_456",
+  "externalId": "friend_transfer_789",
   "metadata": {
-    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789",
-    "aqua_mode": "default",
-    "aqua_token_id": "xlm"
+    "purpose": "Birthday gift",
+    "recipient": "Alice Johnson",
+    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789"
   },
   "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
 }
-``` 
+```
+
+## Validation Rules
+
+### Amount Validation
+- Must be a positive number
+- Must be greater than 0
+- Supports decimal values
+- Maximum precision depends on the token
+
+### Address Validation
+- **Ethereum addresses**: Must be valid 0x-prefixed hex string (40 characters)
+- **Stellar addresses**: Must be valid G-prefixed base32 string (56 characters)
+
+### Chain ID Validation
+- Must be a supported chain ID
+- Must match the provider requirements
+
+### Token Validation
+- **EVM chains**: `tokenAddress` is required and must be valid contract address
+- **Stellar**: `tokenSymbol` is required and must be supported (XLM, USDC_XLM)
+
+## Rate Limiting
+
+- **Limit**: 100 requests per minute per IP address
+- **Headers**: Rate limit information included in response headers
+- **Exceeded Response**: 429 status code with retry information
+
+## Best Practices
+
+1. **Always validate amounts** before sending requests
+2. **Use appropriate token addresses** for EVM chains
+3. **Include meaningful metadata** for tracking
+4. **Handle webhook notifications** for payment status updates
+5. **Implement retry logic** for failed requests
+6. **Store payment IDs** for future reference
+
+## SDK Examples
+
+### JavaScript/TypeScript
+
+```typescript
+interface CreatePaymentRequest {
+  display: {
+    intent: string;
+    currency: string;
+  };
+  destination: {
+    destinationAddress: string;
+    chainId: string;
+    amountUnits: string;
+    tokenSymbol?: string;
+    tokenAddress?: string;
+  };
+  metadata?: Record<string, any>;
+}
+
+async function createPayment(paymentData: CreatePaymentRequest) {
+  const response = await fetch('/functions/v1/payment-api', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(paymentData),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message);
+  }
+
+  return response.json();
+}
+
+// Example usage
+const payment = await createPayment({
+  display: {
+    intent: "Coffee purchase",
+    currency: "USD"
+  },
+  destination: {
+    destinationAddress: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    chainId: "1",
+    amountUnits: "5.50",
+    tokenAddress: "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+  },
+  metadata: {
+    orderId: "12345"
+  }
+});
+```
+
+### Python
+
+```python
+import requests
+from typing import Dict, Any
+
+def create_payment(payment_data: Dict[str, Any]) -> Dict[str, Any]:
+    response = requests.post(
+        '/functions/v1/payment-api',
+        headers={'Content-Type': 'application/json'},
+        json=payment_data
+    )
+    response.raise_for_status()
+    return response.json()
+
+# Example usage
+payment = create_payment({
+    "display": {
+        "intent": "Coffee purchase",
+        "currency": "USD"
+    },
+    "destination": {
+        "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+        "chainId": "1",
+        "amountUnits": "5.50",
+        "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    },
+    "metadata": {
+        "orderId": "12345"
+    }
+})
+```
+
+## Related Endpoints
+
+- [Get Payment by ID](./get-payment-api.md)
+- [Get Payment by External ID](./get-payment-external-api.md)
+- [Webhook Handler](./webhook-handler-api.md)
+- [Health Check](./health-check-api.md) 

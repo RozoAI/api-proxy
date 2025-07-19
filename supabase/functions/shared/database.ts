@@ -24,8 +24,14 @@ export class PaymentDatabase {
     paymentResponse: PaymentResponse,
     providerName: string
   ): Promise<PaymentRecord> {
+    // Validate amount is positive (matches database CHECK constraint)
+    const amount = parseFloat(paymentRequest.destination.amountUnits);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Amount must be a positive number');
+    }
+
     const paymentData = {
-      amount: paymentRequest.destination.amountUnits,
+      amount: amount, // Use parsed amount to ensure it's a number
       currency: paymentRequest.display.currency,
       status: paymentResponse.status,
       external_id: paymentResponse.id,

@@ -1,956 +1,484 @@
-# Payment API Proxy - Complete API Interface Documentation
+# API Interface Documentation
 
-## Overview
+This document provides detailed API specifications for all Supabase Edge Functions in the Payment API Proxy.
 
-The Payment API Proxy provides a unified interface for multiple blockchain payment providers (Daimo Pay and Aqua) while maintaining consistent Daimo Pay format across all responses. The API automatically routes requests to the appropriate provider based on the blockchain chain ID.
+## 📋 Table of Contents
 
-## Base URL
+- [Payment API](#payment-api)
+- [Webhook Handler](#webhook-handler)
+- [Health Check](#health-check)
+- [Error Handling](#error-handling)
+- [Authentication](#authentication)
+- [Rate Limiting](#rate-limiting)
 
-```
-Development: http://localhost:3002
-Production: https://your-domain.com
-```
+## 🏦 Payment API
 
-## Authentication
+**Endpoint**: `/functions/v1/payment-api`
 
-Currently, the API does not require authentication for payment operations. Webhook endpoints use provider-specific authentication mechanisms.
+### Create Payment
 
-## Content Type
+**Method**: `POST`
 
-All requests and responses use `application/json` content type.
+**Description**: Creates a new payment request and routes it to the appropriate provider based on chain ID.
 
----
-
-## Payment Operations
-
-### 1. Create Payment
-
-Creates a new payment request and routes it to the appropriate provider based on chain ID.
-
-#### Endpoint
-```
-POST /api/payment
-```
-
-#### Request Headers
-```
-Content-Type: application/json
-```
-
-#### Request Body Schema
-```typescript
-{
-  display: {
-    intent: string;           // Human-readable payment description
-    currency: string;         // Currency code (e.g., "USD", "EUR")
-  };
-  destination: {
-    destinationAddress: string;  // Recipient address
-    chainId: string;            // Blockchain chain ID
-    amountUnits: string;        // Amount in regular decimal units (e.g., "1.00" for $1.00)
-    tokenSymbol?: string;       // Required for Aqua chains (XLM, USDC_XLM)
-    tokenAddress?: string;      // Required for Daimo chains
-  };
-  metadata?: object;            // Optional additional data
-}
-```
-
-#### Response Schema
-```typescript
-{
-  id: string;                   // Unique payment ID
-  status: PaymentStatus;        // Current payment status
-  createdAt: string;           // Creation timestamp
-  display: {
-    intent: string;
-    currency: string;
-  };
-  source: {                    // null until payment is initiated
-    sourceAddress?: string;
-    txHash?: string;
-    chainId: string;
-    amountUnits: string;        // Regular decimal units
-    tokenSymbol: string;
-    tokenAddress: string;
-  } | null;
-  destination: {
-    destinationAddress: string;
-    txHash: string | null;
-    chainId: string;
-    amountUnits: string;        // Regular decimal units
-    tokenSymbol: string;
-    tokenAddress: string;
-  };
-  externalId: string | null;
-  metadata: object;
-  url: string;                 // Payment URL for user interaction
-}
-```
-
-#### Amount Units Format
-- **amountUnits**: Contains precise decimal amounts in regular units
-  - Examples: "1.00", "10.50", "0.01"
-  - **NOT** smallest units (wei, stroops, etc.)
-  - Must be a valid decimal string with appropriate precision for the token
-  - Providing more decimals than the underlying token supports will result in an error
-
-#### Payment Status Values
-- `payment_unpaid`: Payment created but not yet initiated
-- `payment_started`: Payment has been initiated but not completed
-- `payment_completed`: Payment has been successfully completed
-- `payment_bounced`: Payment failed or was rejected
-
----
-
-### Example 1: Ethereum Payment (Daimo Provider)
-
-#### Request
-```bash
-curl -X POST http://localhost:3002/api/payment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "display": {
-      "intent": "Coffee purchase at Starbucks",
-      "currency": "USD"
-    },
-    "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-      "chainId": "10",
-      "amountUnits": "5.50",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-    },
-    "metadata": {
-      "store": "Starbucks Downtown",
-      "cashier": "John Doe",
-      "items": ["Latte", "Croissant"]
-    }
-  }'
-```
-
-#### Response
+**Request Body**:
 ```json
 {
-  "id": "daimo_1699123456789_abc123def",
-  "status": "payment_unpaid",
-  "createdAt": "1699123456789",
   "display": {
-    "intent": "Coffee purchase at Starbucks",
+    "intent": "Payment for services",
     "currency": "USD"
   },
-  "source": null,
   "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    "txHash": null,
-    "chainId": "10",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "chainId": "1",
+    "amountUnits": "10.00",
+    "tokenSymbol": "ETH",
+    "tokenAddress": "0x0000000000000000000000000000000000000000"
   },
-  "externalId": "starbucks_order_12345",
   "metadata": {
-    "store": "Starbucks Downtown",
-    "cashier": "John Doe",
-    "items": ["Latte", "Croissant"],
-    "provider": "daimo"
-  },
-  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
-}
-```
-
----
-
-### Example 2: Stellar Payment (Aqua Provider)
-
-#### Request
-```bash
-curl -X POST http://localhost:3002/api/payment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "display": {
-      "intent": "Stellar XLM transfer to friend",
-      "currency": "USD"
-    },
-    "destination": {
-      "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-      "chainId": "10001",
-      "amountUnits": "25.00",
-      "tokenSymbol": "XLM"
-    },
-    "metadata": {
-      "purpose": "Birthday gift",
-      "recipient": "Alice Johnson"
-    }
-  }'
-```
-
-#### Response
-```json
-{
-  "id": "aqua_invoice_1699123456_xyz789",
-  "status": "payment_unpaid",
-  "createdAt": "1699123456000",
-  "display": {
-    "intent": "Stellar XLM transfer to friend",
-    "currency": "USD"
-  },
-  "source": null,
-  "destination": {
-    "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-    "txHash": null,
-    "chainId": "10001",
-    "amountUnits": "25.00",
-    "tokenSymbol": "XLM",
-    "tokenAddress": ""
-  },
-  "externalId": "friend_transfer_789",
-  "metadata": {
-    "purpose": "Birthday gift",
-    "recipient": "Alice Johnson",
-    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789",
-    "aqua_mode": "default",
-    "aqua_token_id": "xlm"
-  },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
-}
-```
-
----
-
-### Example 3: Stellar USDC Payment (Aqua Provider)
-
-#### Request
-```bash
-curl -X POST http://localhost:3002/api/payment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "display": {
-      "intent": "USDC payment for freelance work",
-      "currency": "USD"
-    },
-    "destination": {
-      "destinationAddress": "GBQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKD",
-      "chainId": "10001",
-      "amountUnits": "150.00",
-      "tokenSymbol": "USDC_XLM"
-    },
-    "metadata": {
-      "project": "Website Design",
-      "freelancer": "Bob Smith",
-      "hours": 15
-    }
-  }'
-```
-
-#### Response
-```json
-{
-  "id": "aqua_invoice_1699123789_usdc456",
-  "status": "payment_unpaid",
-  "createdAt": "1699123789000",
-  "display": {
-    "intent": "USDC payment for freelance work",
-    "currency": "USD"
-  },
-  "source": null,
-  "destination": {
-    "destinationAddress": "GBQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKDGJGQHFHJOQ4GKD",
-    "txHash": null,
-    "chainId": "10001",
-    "amountUnits": "150.00",
-    "tokenSymbol": "USDC_XLM",
-    "tokenAddress": ""
-  },
-  "externalId": "freelance_payment_456",
-  "metadata": {
-    "project": "Website Design",
-    "freelancer": "Bob Smith",
-    "hours": 15,
-    "aqua_invoice_id": "aqua_invoice_1699123789_usdc456",
-    "aqua_mode": "default",
-    "aqua_token_id": "usdc"
-  },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123789_usdc456"
-}
-```
-
----
-
-### Error Response Example
-```json
-{
-  "error": "Validation failed: Invalid Stellar address format",
-  "details": {
-    "field": "destination.destinationAddress",
-    "code": "INVALID_ADDRESS",
-    "provider": "aqua"
+    "orderId": "12345",
+    "customerId": "cust_123"
   }
 }
 ```
 
----
+**Field Descriptions**:
 
-## 2. Get Payment by ID
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `display.intent` | string | ✅ | Human-readable payment description |
+| `display.currency` | string | ✅ | Currency code (USD, EUR, etc.) |
+| `destination.destinationAddress` | string | ✅ | Recipient address (Ethereum/Stellar) |
+| `destination.chainId` | string | ✅ | Blockchain chain ID |
+| `destination.amountUnits` | string | ✅ | Payment amount (must be > 0) |
+| `destination.tokenSymbol` | string | ❌ | Token symbol (ETH, USDC, XLM, etc.) |
+| `destination.tokenAddress` | string | ❌ | Token contract address (EVM chains) |
+| `metadata` | object | ❌ | Additional payment metadata |
 
-Retrieves a payment by its unique payment ID.
+**Supported Chain IDs**:
 
-#### Endpoint
-```
-GET /api/payment/:paymentId
-```
+| Chain | ID | Provider | Supported Tokens |
+|-------|----|----------|------------------|
+| Ethereum | `1` | Daimo | ETH, USDC, USDT, etc. |
+| Optimism | `10` | Daimo | ETH, USDC, USDT, etc. |
+| Polygon | `137` | Daimo | MATIC, USDC, USDT, etc. |
+| Arbitrum | `42161` | Daimo | ETH, USDC, USDT, etc. |
+| Base | `8453` | Daimo | ETH, USDC, USDT, etc. |
+| BSC | `56` | Daimo | BNB, USDC, USDT, etc. |
+| Stellar | `10001` | Aqua | XLM, USDC_XLM |
 
-#### Path Parameters
-- `paymentId` (string): The unique payment ID
-
----
-
-### Example 1: Get Daimo Payment
-
-#### Request
-```bash
-curl -X GET http://localhost:3002/api/payment/daimo_1699123456789_abc123def
-```
-
-#### Response (Completed Payment)
+**Response**:
 ```json
 {
-  "id": "daimo_1699123456789_abc123def",
-  "status": "payment_completed",
-  "createdAt": "1699123456789",
+  "id": "payment_abc123",
+  "status": "payment_unpaid",
+  "createdAt": "1703123456",
   "display": {
-    "intent": "Coffee purchase at Starbucks",
-    "currency": "USD"
-  },
-  "source": {
-    "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
-    "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-    "chainId": "10",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-    "chainId": "10",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-  "externalId": "starbucks_order_12345",
-  "metadata": {
-    "store": "Starbucks Downtown",
-    "cashier": "John Doe",
-    "items": ["Latte", "Croissant"],
-    "provider": "daimo"
-  },
-  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
-}
-```
-
----
-
-### Example 2: Get Aqua Payment
-
-#### Request
-```bash
-curl -X GET http://localhost:3002/api/payment/aqua_invoice_1699123456_xyz789
-```
-
-#### Response (Completed Payment)
-```json
-{
-  "id": "aqua_invoice_1699123456_xyz789",
-  "status": "payment_completed",
-  "createdAt": "1699123456000",
-  "display": {
-    "intent": "Stellar XLM transfer to friend",
+    "intent": "Payment for services",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-    "txHash": "stellar_tx_hash_abcdef123456789",
-    "chainId": "10001",
-    "amountUnits": "25.00",
-    "tokenSymbol": "XLM",
-    "tokenAddress": ""
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "txHash": null,
+    "chainId": "1",
+    "amountUnits": "10.00",
+    "tokenSymbol": "ETH",
+    "tokenAddress": "0x0000000000000000000000000000000000000000"
   },
-  "externalId": "friend_transfer_789",
+  "externalId": "ext_123",
   "metadata": {
-    "purpose": "Birthday gift",
-    "recipient": "Alice Johnson",
-    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789",
-    "aqua_mode": "default",
-    "aqua_token_id": "xlm",
-    "aqua_status": "paid",
-    "aqua_status_updated_at": 1699123500000
+    "orderId": "12345",
+    "customerId": "cust_123"
   },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
+  "url": "https://checkout.example.com/payment_abc123"
 }
 ```
 
----
+**Status Codes**:
+- `201` - Payment created successfully
+- `400` - Invalid request data
+- `500` - Internal server error
 
-### Error Response Example
+### Get Payment by ID
+
+**Method**: `GET`
+
+**Endpoint**: `/functions/v1/payment-api/{paymentId}`
+
+**Description**: Retrieves payment information by internal payment ID.
+
+**Path Parameters**:
+- `paymentId` (string, required): Internal payment ID
+
+**Response**:
 ```json
 {
-  "error": "Payment not found",
-  "details": {
-    "paymentId": "nonexistent_payment_id",
-    "code": "PAYMENT_NOT_FOUND"
-  }
-}
-```
-
----
-
-## 3. Get Payment by External ID
-
-Retrieves a payment by its external reference ID.
-
-#### Endpoint
-```
-GET /api/payment/external-id/:externalId
-```
-
-#### Path Parameters
-- `externalId` (string): The external reference ID
-
----
-
-### Example 1: Get Daimo Payment by External ID
-
-#### Request
-```bash
-curl -X GET http://localhost:3002/api/payment/external-id/starbucks_order_12345
-```
-
-#### Response
-```json
-{
-  "id": "daimo_1699123456789_abc123def",
+  "id": "payment_abc123",
   "status": "payment_completed",
-  "createdAt": "1699123456789",
+  "createdAt": "1703123456",
   "display": {
-    "intent": "Coffee purchase at Starbucks",
-    "currency": "USD"
-  },
-  "source": {
-    "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
-    "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-    "chainId": "10",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-    "chainId": "10",
-    "amountUnits": "5.50",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-  "externalId": "starbucks_order_12345",
-  "metadata": {
-    "store": "Starbucks Downtown",
-    "cashier": "John Doe",
-    "items": ["Latte", "Croissant"],
-    "provider": "daimo"
-  },
-  "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
-}
-```
-
----
-
-### Example 2: Get Aqua Payment by External ID
-
-#### Request
-```bash
-curl -X GET http://localhost:3002/api/payment/external-id/friend_transfer_789
-```
-
-#### Response
-```json
-{
-  "id": "aqua_invoice_1699123456_xyz789",
-  "status": "payment_completed",
-  "createdAt": "1699123456000",
-  "display": {
-    "intent": "Stellar XLM transfer to friend",
+    "intent": "Payment for services",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-    "txHash": "stellar_tx_hash_abcdef123456789",
-    "chainId": "10001",
-    "amountUnits": "25.00",
-    "tokenSymbol": "XLM",
-    "tokenAddress": ""
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "txHash": "0x1234567890abcdef...",
+    "chainId": "1",
+    "amountUnits": "10.00",
+    "tokenSymbol": "ETH",
+    "tokenAddress": "0x0000000000000000000000000000000000000000"
   },
-  "externalId": "friend_transfer_789",
+  "externalId": "ext_123",
   "metadata": {
-    "purpose": "Birthday gift",
-    "recipient": "Alice Johnson",
-    "aqua_invoice_id": "aqua_invoice_1699123456_xyz789",
-    "aqua_mode": "default",
-    "aqua_token_id": "xlm",
-    "aqua_status": "paid",
-    "aqua_status_updated_at": 1699123500000
-  },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1699123456_xyz789"
-}
-```
-
----
-
-## Webhook Endpoints
-
-### 1. Daimo Webhook
-
-Receives payment status updates from Daimo Pay.
-
-#### Endpoint
-```
-POST /webhooks/daimo
-```
-
-#### Authentication
-Daimo webhooks use signature verification (implementation details depend on Daimo's webhook specification).
-
-#### Request Headers
-```
-Content-Type: application/json
-X-Daimo-Signature: sha256=<signature>
-```
-
----
-
-### Example: Daimo Webhook Event
-
-#### Request Body
-```json
-{
-  "type": "payment.completed",
-  "data": {
-    "id": "daimo_1699123456789_abc123def",
-    "status": "payment_completed",
-    "createdAt": "1699123456789",
-    "display": {
-      "intent": "Coffee purchase at Starbucks",
-      "currency": "USD"
-    },
-    "source": {
-      "sourceAddress": "0x9876543210fedcba9876543210fedcba98765432",
-      "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-      "chainId": "10",
-      "amountUnits": "5.50",
-      "tokenSymbol": "USDC",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-    },
-    "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-      "txHash": "0xabcdef123456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-      "chainId": "10",
-      "amountUnits": "5.50",
-      "tokenSymbol": "USDC",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-    },
-    "metadata": {
-      "store": "Starbucks Downtown",
-      "cashier": "John Doe",
-      "items": ["Latte", "Croissant"]
-    },
-    "url": "https://pay.daimo.com/link/daimo_1699123456789_abc123def"
+    "orderId": "12345"
   }
 }
 ```
 
-#### Response
+**Status Codes**:
+- `200` - Payment found
+- `404` - Payment not found
+- `500` - Internal server error
+
+### Get Payment by External ID
+
+**Method**: `GET`
+
+**Endpoint**: `/functions/v1/payment-api/external-id/{externalId}`
+
+**Description**: Retrieves payment information by external provider ID.
+
+**Path Parameters**:
+- `externalId` (string, required): External provider payment ID
+
+**Response**: Same as Get Payment by ID
+
+**Status Codes**:
+- `200` - Payment found
+- `404` - Payment not found
+- `500` - Internal server error
+
+## 🔗 Webhook Handler
+
+**Endpoint**: `/functions/v1/webhook-handler`
+
+### Daimo Webhook
+
+**Method**: `POST`
+
+**Query Parameters**:
+- `provider=daimo` (required)
+- `token={webhook_token}` (required)
+
+**Headers**:
+- `X-Daimo-Signature`: SHA256 signature for verification
+- `Content-Type`: `application/json`
+
+**Request Body**:
+```json
+{
+  "type": "payment_completed",
+  "paymentId": "payment_123",
+  "chainId": 10,
+  "txHash": "0x1234567890abcdef...",
+  "payment": {
+    "amount": "1000000",
+    "currency": "USD",
+    "recipient": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6"
+  }
+}
+```
+
+**Webhook Event Types**:
+- `payment_started` - Payment initiated
+- `payment_completed` - Payment successful
+- `payment_failed` - Payment failed
+- `payment_cancelled` - Payment cancelled
+
+**Response**:
 ```json
 {
   "success": true,
-  "message": "Webhook processed successfully"
+  "message": "Daimo webhook processed successfully",
+  "paymentId": "payment_123",
+  "status": "payment_completed",
+  "processedAt": "2024-01-01T00:00:00.000Z"
 }
 ```
 
----
+### Aqua Webhook
 
-### 2. Aqua Webhook
+**Method**: `POST`
 
-Receives payment status updates from Aqua.
+**Query Parameters**:
+- `provider=aqua` (required)
+- `token={webhook_token}` (required)
 
-#### Endpoint
-```
-POST /webhooks/aqua?token=<webhook_token>
-```
-
-#### Authentication
-Token-based authentication via query parameter.
-
-#### Request Headers
-```
-Content-Type: application/json
-```
-
----
-
-### Example: Aqua Webhook Event
-
-#### Request
-```bash
-curl -X POST "http://localhost:3002/webhooks/aqua?token=secure-webhook-token-here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "invoice_id": "aqua_invoice_1699123456_xyz789",
-    "mode": "default",
-    "status": "paid",
-    "status_updated_at_t": 1699123500000,
-    "created_at": "2023-11-04T12:30:56.000Z",
-    "address": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-    "amount": 25.00,
-    "callback_url": "http://localhost:3002/webhooks/aqua?token=secure-webhook-token-here",
-    "transaction_hash": "stellar_tx_hash_abcdef123456789",
-    "token_id": "xlm",
-    "metadata": {
-      "daimo_external_id": "friend_transfer_789",
-      "daimo_intent": "Stellar XLM transfer to friend",
-      "daimo_currency": "USD",
-      "original_metadata": {
-        "purpose": "Birthday gift",
-        "recipient": "Alice Johnson"
-      }
-    }
-  }'
+**Request Body**:
+```json
+{
+  "invoice_id": "aqua_invoice_123",
+  "status": "paid",
+  "amount": 100.50,
+  "address": "GABCDEFGHIJKLMNOPQRSTUVWXYZ123456789012345678901234567890",
+  "token_id": "usdc",
+  "transaction_hash": "stellar_tx_hash_123"
+}
 ```
 
-#### Response
+**Aqua Status Values**:
+- `created` - Invoice created
+- `retry` - Payment retry
+- `paid` - Payment successful
+- `failed` - Payment failed
+- `deleted` - Invoice deleted
+
+**Response**:
 ```json
 {
   "success": true,
-  "message": "Payment aqua_payment_123 updated to payment_completed"
+  "message": "Aqua webhook processed successfully",
+  "invoice_id": "aqua_invoice_123",
+  "payment_id": "payment_abc123",
+  "status": "payment_completed",
+  "transaction_hash": "stellar_tx_hash_123",
+  "processed_at": "2024-01-01T00:00:00.000Z"
 }
 ```
 
----
+**Status Codes**:
+- `200` - Webhook processed successfully
+- `400` - Invalid webhook data
+- `401` - Invalid webhook token
+- `404` - Payment not found
+- `500` - Internal server error
 
-### Webhook Error Response
-```json
-{
-  "success": false,
-  "error": "Invalid authentication token"
-}
-```
+## 🏥 Health Check
 
----
+**Endpoint**: `/functions/v1/api-health`
 
-## Monitoring Endpoints
+**Method**: `GET`
 
-### 1. Health Check
+**Description**: Provides comprehensive system health status including provider connectivity and withdrawal integration status.
 
-Returns the overall system health and provider status.
-
-#### Endpoint
-```
-GET /health
-```
-
-#### Example Request
-```bash
-curl -X GET http://localhost:3002/health
-```
-
-#### Response
+**Response**:
 ```json
 {
   "status": "healthy",
-  "timestamp": "2023-11-04T12:30:56.789Z",
-  "uptime": 86400,
+  "timestamp": "2024-01-01T00:00:00.000Z",
   "version": "1.0.0",
+  "database": {
+    "status": "connected",
+    "responseTime": 5
+  },
   "providers": {
     "daimo": {
       "status": "healthy",
-      "responseTime": 125,
-      "lastCheck": "2023-11-04T12:30:55.000Z"
+      "responseTime": 150,
+      "lastCheck": "2024-01-01T00:00:00.000Z",
+      "baseUrl": "https://pay.daimo.com",
+      "enabled": true
     },
     "aqua": {
       "status": "healthy",
-      "responseTime": 89,
-      "lastCheck": "2023-11-04T12:30:55.000Z"
+      "responseTime": 200,
+      "lastCheck": "2024-01-01T00:00:00.000Z",
+      "baseUrl": "https://api.aqua.network",
+      "enabled": true
     }
   },
-  "database": {
+  "withdrawal_integration": {
     "status": "healthy",
-    "responseTime": 12,
-    "connectionPool": {
-      "active": 2,
-      "idle": 8,
-      "total": 10
-    }
-  }
-}
-```
-
----
-
-### 2. Provider Status
-
-Returns detailed status information for all providers.
-
-#### Endpoint
-```
-GET /api/providers/status
-```
-
-#### Example Request
-```bash
-curl -X GET http://localhost:3002/api/providers/status
-```
-
-#### Response
-```json
-{
-  "providers": [
-    {
-      "name": "daimo",
-      "status": "healthy",
-      "supportedChains": [1, 10, 137, 42161, 8453, 56, 43114, 250, 314, 42220, 100, 1101, 59144, 5000, 534352, 324],
-      "config": {
-        "baseUrl": "https://api.daimo.com",
-        "timeout": 30000
-      },
-      "healthCheck": {
-        "lastCheck": "2023-11-04T12:30:55.000Z",
-        "responseTime": 125,
-        "status": "healthy"
-      }
+    "enabled": true,
+    "baseUrl": "https://withdrawal-api.example.com",
+    "lastCheck": "2024-01-01T00:00:00.000Z"
+  },
+  "system": {
+    "uptime": 3600,
+    "memory": {
+      "used": 512,
+      "total": 1024
     },
-    {
-      "name": "aqua",
-      "status": "healthy",
-      "supportedChains": [10001],
-      "config": {
-        "baseUrl": "https://api.aqua.network",
-        "timeout": 30000
-      },
-      "healthCheck": {
-        "lastCheck": "2023-11-04T12:30:55.000Z",
-        "responseTime": 89,
-        "status": "healthy"
-      }
-    }
-  ],
-  "routing": {
-    "defaultProvider": "daimo",
-    "chainMappings": {
-      "10001": "aqua"
-    }
+    "environment": "production"
   }
 }
 ```
 
----
+**Health Status Values**:
+- `healthy` - All systems operational
+- `degraded` - Some systems experiencing issues
+- `unhealthy` - Critical systems down
 
-## Error Handling
+**Status Codes**:
+- `200` - System healthy
+- `503` - System unhealthy
+
+## ❌ Error Handling
 
 ### Standard Error Response Format
+
 ```json
 {
-  "error": "Error message",
+  "error": "Payment processing failed",
+  "message": "An error occurred while processing the payment",
   "details": {
-    "code": "ERROR_CODE",
-    "field": "fieldName",
-    "provider": "providerName"
+    "provider": "daimo",
+    "timestamp": "2024-01-01T00:00:00.000Z",
+    "errorType": "ValidationError",
+    "statusCode": 400,
+    "requestId": "req_123",
+    "responseData": {}
   }
 }
 ```
 
-### Common Error Codes
+### Common Error Types
 
-#### Validation Errors (400)
-- `INVALID_ADDRESS`: Invalid blockchain address format
-- `INVALID_CHAIN_ID`: Unsupported or invalid chain ID
-- `INVALID_AMOUNT`: Invalid amount format or value
-- `MISSING_REQUIRED_FIELD`: Required field is missing
-- `INVALID_TOKEN`: Unsupported token for the specified chain
+| Error Type | Status Code | Description |
+|------------|-------------|-------------|
+| `ValidationError` | 400 | Invalid request data |
+| `AuthenticationError` | 401 | Invalid API key or token |
+| `NotFoundError` | 404 | Resource not found |
+| `ProviderError` | 502 | External provider error |
+| `InternalError` | 500 | Internal server error |
 
-#### Not Found Errors (404)
-- `PAYMENT_NOT_FOUND`: Payment ID does not exist
-- `EXTERNAL_ID_NOT_FOUND`: External ID does not exist
+### Error Codes
 
-#### Provider Errors (502)
-- `PROVIDER_UNAVAILABLE`: Payment provider is currently unavailable
-- `PROVIDER_ERROR`: Error from the payment provider
-- `PROVIDER_TIMEOUT`: Provider request timed out
+| Code | Description |
+|------|-------------|
+| `INVALID_AMOUNT` | Amount must be positive |
+| `INVALID_ADDRESS` | Invalid destination address |
+| `UNSUPPORTED_CHAIN` | Chain ID not supported |
+| `PROVIDER_UNAVAILABLE` | Provider service down |
+| `WEBHOOK_INVALID` | Invalid webhook signature |
+| `PAYMENT_NOT_FOUND` | Payment record not found |
 
-#### Server Errors (500)
-- `INTERNAL_ERROR`: Internal server error
-- `DATABASE_ERROR`: Database operation failed
+## 🔐 Authentication
 
----
+### API Key Authentication
 
-## Rate Limiting
+For payment creation endpoints, include your API key in the request headers:
 
-The API implements rate limiting to prevent abuse:
+```bash
+curl -X POST /functions/v1/payment-api \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"display": {...}, "destination": {...}}'
+```
 
-- **Limit**: 100 requests per 15 minutes per IP address
-- **Headers**: Rate limit information is included in response headers
-  - `X-RateLimit-Limit`: Request limit
-  - `X-RateLimit-Remaining`: Remaining requests
-  - `X-RateLimit-Reset`: Reset time
+### Webhook Authentication
 
-### Rate Limit Exceeded Response
+#### Daimo Webhooks
+- Signature verification using `X-Daimo-Signature` header
+- Token-based authentication via query parameter
+
+#### Aqua Webhooks
+- Token-based authentication via query parameter
+- No signature verification required
+
+## 🚦 Rate Limiting
+
+### Default Limits
+
+| Endpoint | Rate Limit | Window |
+|----------|------------|--------|
+| Payment API | 100 requests | 1 minute |
+| Webhook Handler | 1000 requests | 1 minute |
+| Health Check | 60 requests | 1 minute |
+
+### Rate Limit Headers
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640995200
+```
+
+### Rate Limit Response
+
 ```json
 {
-  "error": "Too many requests",
-  "details": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "limit": 100,
-    "window": "15 minutes",
-    "retryAfter": 900
-  }
+  "error": "Rate limit exceeded",
+  "message": "Too many requests, please try again later",
+  "retryAfter": 60
 }
 ```
 
----
+## 📊 Request/Response Examples
 
-## Supported Chains and Providers
+### Complete Payment Flow
 
-### Chain ID Routing
-
-| Chain ID | Blockchain | Provider | Tokens |
-|----------|------------|----------|---------|
-| 1 | Ethereum Mainnet | Daimo | ETH, ERC-20 |
-| 10 | Optimism | Daimo | ETH, ERC-20 |
-| 137 | Polygon | Daimo | MATIC, ERC-20 |
-| 42161 | Arbitrum One | Daimo | ETH, ERC-20 |
-| 8453 | Base | Daimo | ETH, ERC-20 |
-| 56 | BSC | Daimo | BNB, BEP-20 |
-| 43114 | Avalanche | Daimo | AVAX, ERC-20 |
-| 250 | Fantom | Daimo | FTM, ERC-20 |
-| 314 | Filecoin | Daimo | FIL, ERC-20 |
-| 42220 | Celo | Daimo | CELO, ERC-20 |
-| 100 | Gnosis | Daimo | xDAI, ERC-20 |
-| 1101 | Polygon zkEVM | Daimo | ETH, ERC-20 |
-| 59144 | Linea | Daimo | ETH, ERC-20 |
-| 5000 | Mantle | Daimo | MNT, ERC-20 |
-| 534352 | Scroll | Daimo | ETH, ERC-20 |
-| 324 | zkSync | Daimo | ETH, ERC-20 |
-| 10001 | Stellar | Aqua | XLM, USDC_XLM |
-
----
-
-## SDK Examples
-
-### JavaScript/TypeScript
-
-```typescript
-// Create payment
-const createPayment = async (paymentData: PaymentRequest) => {
-  const response = await fetch('http://localhost:3002/api/payment', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(paymentData),
-  });
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  
-  return response.json();
-};
-
-// Get payment
-const getPayment = async (paymentId: string) => {
-  const response = await fetch(`http://localhost:3002/api/payment/${paymentId}`);
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  
-  return response.json();
-};
-
-// Example usage
-const daimoPayment = await createPayment({
-  display: {
-    intent: "Coffee purchase",
-    currency: "USD"
-  },
-  destination: {
-    destinationAddress: "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    chainId: "10",
-    amountUnits: "5.50",
-    tokenAddress: "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-  },
-});
-
-const aquaPayment = await createPayment({
-  display: {
-    intent: "Stellar transfer",
-    currency: "USD"
-  },
-  destination: {
-    destinationAddress: "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-    chainId: "10001",
-    amountUnits: "25.00",
-    tokenSymbol: "XLM"
-  }
-});
-```
-
-### Python
-
-```python
-import requests
-import json
-
-def create_payment(payment_data):
-    response = requests.post(
-        'http://localhost:3002/api/payment',
-        headers={'Content-Type': 'application/json'},
-        json=payment_data
-    )
-    response.raise_for_status()
-    return response.json()
-
-def get_payment(payment_id):
-    response = requests.get(f'http://localhost:3002/api/payment/{payment_id}')
-    response.raise_for_status()
-    return response.json()
-
-# Example usage
-daimo_payment = create_payment({
+1. **Create Payment**
+```bash
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
     "display": {
-        "intent": "Coffee purchase",
-        "currency": "USD"
+      "intent": "Coffee purchase",
+      "currency": "USD"
     },
     "destination": {
-        "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-        "chainId": "10",
-        "amountUnits": "5.50",
-        "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-    },
-})
-
-aqua_payment = create_payment({
-    "display": {
-        "intent": "Stellar transfer",
-        "currency": "USD"
-    },
-    "destination": {
-        "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-        "chainId": "10001",
-        "amountUnits": "25.00",
-        "tokenSymbol": "XLM"
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+      "chainId": "10",
+      "amountUnits": "5500000",
+      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     }
-})
+  }'
 ```
 
----
+2. **Check Payment Status**
+```bash
+curl https://your-project.supabase.co/functions/v1/payment-api/payment_abc123
+```
 
-This comprehensive API documentation covers all endpoints with detailed examples for both Daimo and Aqua providers, including request/response formats, error handling, and SDK examples. 
+3. **Webhook Notification** (automated)
+```bash
+curl -X POST https://your-project.supabase.co/functions/v1/webhook-handler?provider=daimo&token=webhook_token \
+  -H "Content-Type: application/json" \
+  -d '{"type":"payment_completed","paymentId":"payment_abc123"}'
+```
+
+## 🔧 Testing
+
+### Test Endpoints
+
+```bash
+# Health check
+curl https://your-project.supabase.co/functions/v1/api-health
+
+# Test payment creation
+curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {"intent": "Test", "currency": "USD"},
+    "destination": {
+      "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
+      "chainId": "1",
+      "amountUnits": "1000000",
+      "tokenAddress": "0x0000000000000000000000000000000000000000"
+    }
+  }'
+```
+
+### Local Testing
+
+```bash
+# Start local development
+supabase start
+
+# Test local endpoints
+curl http://localhost:54321/functions/v1/api-health
+curl -X POST http://localhost:54321/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{"display": {...}, "destination": {...}}'
+```
+
+## 📚 Additional Resources
+
+- [Supabase Edge Functions Documentation](https://supabase.com/docs/guides/functions)
+- [Daimo Pay API Documentation](https://paydocs.daimo.com/)
+- [Aqua Payment Documentation](./aqua.md)
+- [Database Schema](./database-schema.md)
+- [Troubleshooting Guide](./troubleshooting.md) 

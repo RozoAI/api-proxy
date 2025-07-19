@@ -11,7 +11,7 @@ supabase/
 ├── functions/
 │   ├── payment-api/           # Payment creation & retrieval
 │   ├── webhook-handler/       # Daimo & Aqua webhook processing  
-│   ├── health-check/          # System health & provider status
+│   ├── api-health/            # System health & provider status
 │   └── shared/               # Shared utilities & types
 ├── migrations/              # Database schema & tables
 └── config.toml             # Supabase configuration
@@ -23,13 +23,15 @@ supabase/
 |----------|----------|-------------|
 | `payment-api` | `/functions/v1/payment-api` | Create payments, get payment status |
 | `webhook-handler` | `/functions/v1/webhook-handler` | Process Daimo/Aqua webhooks, trigger withdrawals |
-| `health-check` | `/functions/v1/health-check` | System health, provider status |
+| `api-health` | `/functions/v1/api-health` | System health, provider status |
 
 ### 🗄️ Database Schema
 
 - **PostgreSQL** (Supabase built-in)
 - **Row Level Security (RLS)** enabled
 - **Real-time subscriptions** for payment updates
+- **Optimized indexes** for performance
+- **CHECK constraints** for data integrity
 
 ## 📋 Prerequisites
 
@@ -93,6 +95,7 @@ supabase secrets set CORS_ORIGINS="https://yourapp.com,https://yourdomain.com"
 # Daimo Provider
 supabase secrets set DAIMO_API_KEY="your-daimo-api-key"
 supabase secrets set DAIMO_BASE_URL="https://pay.daimo.com"
+supabase secrets set DAIMO_WEBHOOK_TOKEN="your-daimo-webhook-token"
 
 # Aqua Provider  
 supabase secrets set AQUA_BASE_URL="https://api.aqua.network"
@@ -125,7 +128,7 @@ supabase db status
 # Deploy all functions
 supabase functions deploy payment-api
 supabase functions deploy webhook-handler  
-supabase functions deploy health-check
+supabase functions deploy api-health
 
 # Or deploy all at once
 supabase functions deploy
@@ -142,24 +145,21 @@ supabase db reset --linked
 
 ```bash
 # Test health check
-curl https://<your-project-ref>.supabase.co/functions/v1/health-check
+curl https://<your-project-ref>.supabase.co/functions/v1/api-health
 
 # Test payment creation
 curl -X POST https://<your-project-ref>.supabase.co/functions/v1/payment-api \
   -H "Content-Type: application/json" \
   -d '{
-    "action": "create",
-    "data": {
-      "display": {
-        "intent": "Test payment",
-        "currency": "USD"
-      },
-      "destination": {
-        "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
-        "chainId": "10",
-        "amountUnits": "1000000",
-        "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-      }
+    "display": {
+      "intent": "Test payment",
+      "currency": "USD"
+    },
+    "destination": {
+      "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
+      "chainId": "10",
+      "amountUnits": "1000000",
+      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
     }
   }'
 ```
@@ -185,7 +185,7 @@ supabase start
 supabase functions serve
 
 # Test local function
-curl http://localhost:54321/functions/v1/health-check
+curl http://localhost:54321/functions/v1/api-health
 ```
 
 ### Local Database Management
@@ -208,39 +208,37 @@ POST /functions/v1/payment-api
 Content-Type: application/json
 
 {
-  "action": "create",
-  "data": {
-    "display": {
-      "intent": "Coffee purchase",
-      "currency": "USD"
-    },
-    "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-      "chainId": "10",
-      "amountUnits": "5500000",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
-    }
+  "display": {
+    "intent": "Coffee purchase",
+    "currency": "USD"
+  },
+  "destination": {
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+    "chainId": "10",
+    "amountUnits": "5500000",
+    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+  },
+  "metadata": {
+    "orderId": "12345"
   }
 }
 ```
 
-#### Get Payment Status
+#### Get Payment by ID
 ```bash
-POST /functions/v1/payment-api
-Content-Type: application/json
+GET /functions/v1/payment-api/{paymentId}
+```
 
-{
-  "action": "get",
-  "paymentId": "payment_123",
-  "chainId": "10"
-}
+#### Get Payment by External ID
+```bash
+GET /functions/v1/payment-api/external-id/{externalId}
 ```
 
 ### Webhook Handler
 
 #### Daimo Webhook
 ```bash
-POST /functions/v1/webhook-handler?provider=daimo
+POST /functions/v1/webhook-handler?provider=daimo&token=your-webhook-token
 Content-Type: application/json
 X-Daimo-Signature: sha256=...
 
@@ -270,7 +268,7 @@ Content-Type: application/json
 
 ### Health Check
 ```bash
-GET /functions/v1/health-check
+GET /functions/v1/api-health
 
 # Response
 {
@@ -278,8 +276,16 @@ GET /functions/v1/health-check
   "timestamp": "2024-01-01T00:00:00.000Z",
   "database": "connected",
   "providers": {
-    "daimo": "healthy",
-    "aqua": "healthy"
+    "daimo": {
+      "status": "healthy",
+      "responseTime": 150,
+      "lastCheck": "2024-01-01T00:00:00.000Z"
+    },
+    "aqua": {
+      "status": "healthy", 
+      "responseTime": 200,
+      "lastCheck": "2024-01-01T00:00:00.000Z"
+    }
   },
   "withdrawal_integration": {
     "status": "healthy",
@@ -296,7 +302,7 @@ GET /functions/v1/health-check
 ```sql
 CREATE TABLE payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amount DECIMAL(20,8) NOT NULL,
+  amount DECIMAL(20,8) NOT NULL CHECK (amount > 0),
   currency TEXT NOT NULL,
   status payment_status NOT NULL DEFAULT 'payment_unpaid',
   external_id TEXT,
@@ -321,6 +327,28 @@ CREATE TYPE payment_status AS ENUM (
   'payment_bounced',
   'payment_refunded'
 );
+```
+
+### Optimized Indexes
+
+```sql
+-- Main status query optimization
+CREATE INDEX idx_payments_status_created_at ON payments(status, created_at DESC);
+
+-- Unique external_id constraint
+CREATE UNIQUE INDEX idx_payments_external_id_unique ON payments(external_id) WHERE external_id IS NOT NULL;
+
+-- Stale payment detection
+CREATE INDEX idx_payments_status_status_updated ON payments(status, status_updated_at);
+
+-- Provider and chain specific queries
+CREATE INDEX idx_payments_provider_status ON payments(provider_name, status);
+CREATE INDEX idx_payments_chain_status ON payments(chain_id, status);
+
+-- Partial indexes for specific status values
+CREATE INDEX idx_payments_status_unpaid ON payments(created_at DESC) WHERE status = 'payment_unpaid';
+CREATE INDEX idx_payments_status_started ON payments(created_at DESC) WHERE status = 'payment_started';
+CREATE INDEX idx_payments_status_completed ON payments(created_at DESC) WHERE status = 'payment_completed';
 ```
 
 ### Row Level Security (RLS)
@@ -355,7 +383,7 @@ Log Success/Failure
 # View function logs
 supabase functions logs payment-api
 supabase functions logs webhook-handler
-supabase functions logs health-check
+supabase functions logs api-health
 
 # Real-time logs
 supabase functions logs --follow
@@ -366,6 +394,7 @@ supabase functions logs --follow
 - Error rates
 - Response times
 - Database query performance
+- Provider health status
 
 ### Alerts
 - Payment processing failures
@@ -386,11 +415,18 @@ supabase functions logs --follow
 - **Custom**: Additional rate limiting for webhook endpoints
 - **DDoS Protection**: Supabase infrastructure-level protection
 
+### Data Integrity
+- **CHECK constraints**: Amount must be positive
+- **Unique constraints**: External IDs are unique
+- **Input validation**: Application-level validation
+- **Type safety**: TypeScript throughout
+
 ## 🚀 Production Checklist
 
 ### Pre-Deployment
 - [ ] Environment secrets configured
 - [ ] Database migrations applied
+- [ ] Database improvements applied (`./apply-db-improvements.sh`)
 - [ ] RLS policies enabled
 - [ ] CORS origins configured
 - [ ] API keys obtained from providers
@@ -409,6 +445,7 @@ supabase functions logs --follow
 - [ ] Update provider API configurations
 - [ ] Scale function resources as needed
 - [ ] Regular database maintenance
+- [ ] Monitor index usage
 
 ## 🔧 Troubleshooting
 
@@ -458,6 +495,7 @@ curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo 
 - [Deno Runtime Documentation](https://deno.land/manual)  
 - [Daimo Pay API Documentation](https://paydocs.daimo.com/)
 - [Aqua Payment Documentation](./aqua.md)
+- [API Interface Documentation](./docs/)
 
 ## 🤝 Contributing
 
@@ -467,6 +505,13 @@ curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo 
 4. Commit changes (`git commit -m 'Add amazing feature'`)
 5. Push to branch (`git push origin feature/amazing-feature`)
 6. Open Pull Request
+
+### Development Guidelines
+- Use TypeScript for all new code
+- Follow existing code patterns
+- Add tests for new functionality
+- Update documentation for API changes
+- Use conventional commit messages
 
 ## 📄 License
 
@@ -482,7 +527,7 @@ git clone <repo> && cd payment-api-proxy
 supabase init && supabase link --project-ref <your-ref>
 supabase secrets set DAIMO_API_KEY="your-key" AQUA_API_TOKEN="your-token"
 supabase db push && supabase functions deploy
-curl https://<your-ref>.supabase.co/functions/v1/health-check
+curl https://<your-ref>.supabase.co/functions/v1/api-health
 ```
 
 You're now ready to process payments through multiple blockchain networks with automatic withdrawal integration! 🎉
