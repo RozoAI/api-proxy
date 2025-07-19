@@ -89,21 +89,6 @@ export class PaymentDatabase {
     return data;
   }
 
-  async getPaymentsByAppId(appId: string): Promise<PaymentRecord[]> {
-    const { data, error } = await this.supabase
-      .from('payments')
-      .select('*')
-      .eq('app_id', appId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[Database] Error getting payments by app ID:', error);
-      throw new Error(`Failed to get payments: ${error.message}`);
-    }
-
-    return data || [];
-  }
-
   async updatePaymentStatus(
     paymentId: string,
     status: string,

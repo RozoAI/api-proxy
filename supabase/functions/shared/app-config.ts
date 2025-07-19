@@ -133,17 +133,6 @@ export class AppConfigService {
     return this.appConfigs.has(appId);
   }
 
-  public getAppIdFromDomain(domain: string): string {
-    // Map domains to app IDs
-    const domainMap: Record<string, string> = {
-      'invoice.rozo.ai': 'rozoInvoiceStellar',
-      'demo.rozo.ai': 'rozoDemoStellar',
-      'test.rozo.ai': 'rozoTestStellar',
-    };
-
-    return domainMap[domain] || 'rozoTestStellar'; // Default to rozoTestStellar
-  }
-
   public getSupportedTokens(appId: string): string[] {
     const config = this.getAppConfig(appId);
     if (!config) return [];
