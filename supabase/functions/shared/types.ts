@@ -8,6 +8,7 @@ export interface PaymentRequest {
   };
   destination: PaymentDestination;
   metadata?: Record<string, any>;
+  appId?: string;
 }
 
 export interface PaymentDestination {
@@ -31,6 +32,7 @@ export interface PaymentResponse {
   externalId?: string;
   metadata?: Record<string, any>;
   url?: string;
+  appId?: string;
 }
 
 export interface PaymentSource {
@@ -58,6 +60,17 @@ export type PaymentStatus =
   | 'payment_bounced'
   | 'payment_refunded';
 
+// App configuration for different applications
+export interface AppConfig {
+  appId: string;
+  name: string;
+  payoutToken: 'XLM' | 'USDC_XLM' | 'USDC_BASE' | 'USDC_SOLANA';
+  payoutAddress: string;
+  payoutChainId: string;
+  enabled: boolean;
+  description?: string;
+}
+
 // Database record interface
 export interface PaymentRecord {
   id: string;
@@ -74,6 +87,7 @@ export interface PaymentRecord {
   provider_response?: any;
   metadata?: any;
   original_request: any;
+  app_id?: string; // New field for app tracking
 }
 
 // Webhook types

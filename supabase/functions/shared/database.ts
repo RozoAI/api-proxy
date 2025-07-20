@@ -40,6 +40,7 @@ export class PaymentDatabase {
       provider_response: paymentResponse,
       metadata: paymentRequest.metadata || null,
       original_request: paymentRequest,
+      app_id: paymentRequest.appId || null, // Add appId to database
     };
 
     const { data, error } = await this.supabase
@@ -162,6 +163,7 @@ export class PaymentDatabase {
       destination: record.original_request.destination,
       externalId: record.external_id,
       metadata: record.metadata || null,
+      appId: record.app_id || undefined, // Include appId in response
     };
   }
 
