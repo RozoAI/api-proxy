@@ -15,10 +15,10 @@ export class DaimoProvider extends BaseProvider {
   }
 
   async createPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
-    this.logRequest('POST', `${this.config.baseUrl}/link/create`, paymentData);
+    this.logRequest('POST', `${this.config.baseUrl}/api/payment`, paymentData);
 
     try {
-      const response = await this.makeRequest(`${this.config.baseUrl}/link/create`, {
+      const response = await this.makeRequest(`${this.config.baseUrl}/api/payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
