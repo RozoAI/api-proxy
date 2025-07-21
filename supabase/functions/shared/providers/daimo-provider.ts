@@ -126,8 +126,40 @@ export class DaimoProvider extends BaseProvider {
         amountUnits: paymentData.destination.amountUnits,
         tokenAddress: paymentData.destination.tokenAddress,
       },
-      metadata: paymentData.metadata || {},
+      metadata: this.serializeMetadata(paymentData.metadata || {}),
     };
+  }
+
+  private serializeMetadata(metadata: Record<string, any>): Record<string, string> {
+    const serialized: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value === null || value === undefined) {
+        // Skip null/undefined values
+        continue;
+      }
+
+      if (typeof value === 'string') {
+        // Already a string, use as-is
+        serialized[key] = value;
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        // Convert primitives to string
+        serialized[key] = String(value);
+      } else if (Array.isArray(value) || typeof value === 'object') {
+        // Serialize complex objects/arrays to JSON string
+        try {
+          serialized[key] = JSON.stringify(value);
+        } catch (error) {
+          console.warn(`[DaimoProvider] Failed to serialize metadata key "${key}":`, error);
+          serialized[key] = String(value); // Fallback to string conversion
+        }
+      } else {
+        // Fallback for any other type
+        serialized[key] = String(value);
+      }
+    }
+
+    return serialized;
   }
 
   private transformFromDaimoResponse(
@@ -165,12 +197,41 @@ export class DaimoProvider extends BaseProvider {
       },
       externalId: daimoResponse.externalId || daimoResponse.id || null,
       metadata: {
+        ...this.deserializeMetadata(daimoResponse.metadata || {}),
         ...originalRequest?.metadata,
-        ...daimoResponse.metadata,
         provider: 'daimo',
       },
       url: daimoResponse.url || `${this.config.baseUrl}/link/${daimoResponse.id}`,
     };
+  }
+
+  private deserializeMetadata(metadata: Record<string, string>): Record<string, any> {
+    const deserialized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(metadata)) {
+      if (typeof value !== 'string') {
+        deserialized[key] = value;
+        continue;
+      }
+
+      // Try to parse JSON strings back to objects/arrays
+      if (
+        (value.startsWith('{') && value.endsWith('}')) ||
+        (value.startsWith('[') && value.endsWith(']'))
+      ) {
+        try {
+          deserialized[key] = JSON.parse(value);
+        } catch {
+          // If parsing fails, keep as string
+          deserialized[key] = value;
+        }
+      } else {
+        // Keep as string
+        deserialized[key] = value;
+      }
+    }
+
+    return deserialized;
   }
 
   private mapDaimoStatus(daimoStatus: string): string {
