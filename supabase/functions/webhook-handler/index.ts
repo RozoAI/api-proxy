@@ -128,7 +128,9 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
     const status = mapAquaStatusToPaymentStatus(webhookData.status);
 
     // Find payment by external_id (invoice_id) since Aqua uses invoice IDs
-    const existingPayment = await db.getPaymentByExternalId(webhookData.invoice_id);
+    const existingPayment = await db.getPaymentByExternalId(
+      'aqua_invoice_' + webhookData.invoice_id
+    );
 
     if (!existingPayment) {
       console.warn(`[WebhookHandler] No payment found for Aqua invoice: ${webhookData.invoice_id}`);
