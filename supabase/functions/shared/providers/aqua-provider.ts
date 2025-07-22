@@ -142,7 +142,7 @@ export class AquaProvider extends BaseProvider {
     aquaResponse: any,
     originalRequest?: PaymentRequest
   ): PaymentResponse {
-    const paymentId = `aqua_invoice_${aquaResponse.invoice_id || Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const paymentId = `aqua_invoice_${aquaResponse.invoice_id || Date.now()}}`;
 
     return {
       id: paymentId,

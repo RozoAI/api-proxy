@@ -78,4 +78,7 @@ enabled = true
 # Configure the request handling policy for Edge Functions
 policy = "oneshot"
 # Port to attach the Chrome inspector for debugging Edge Functions
-inspector_port = 8083 
+inspector_port = 8083
+
+[functions.webhook-handler]
+verify_jwt = false

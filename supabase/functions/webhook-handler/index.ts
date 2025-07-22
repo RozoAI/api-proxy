@@ -238,6 +238,9 @@ async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
       return;
     }
 
+    console.log('withdrawalApiUrl', withdrawalApiUrl);
+    console.log('withdrawalApiToken', Deno.env.get('WITHDRAWAL_API_TOKEN'));
+
     // Trigger withdrawal integration
     const withdrawalResponse = await fetch(`${withdrawalApiUrl}/withdrawals`, {
       method: 'POST',
@@ -246,16 +249,9 @@ async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
         Authorization: `Bearer ${Deno.env.get('WITHDRAWAL_API_TOKEN') || ''}`,
       },
       body: JSON.stringify({
-        payment_id: paymentId,
-        external_id: payment.external_id,
         amount: payment.amount,
-        currency: paymentCurrency,
-        chain: payment.chain_id === '10001' ? 'stellar' : 'evm',
-        metadata: {
-          original_payment: payment.original_request,
-          provider: payment.provider_name,
-          processed_at: new Date().toISOString(),
-        },
+        chain: payment.chain_id === '10001' ? 'base' : 'stellar',
+        token: 'USDC',
       }),
     });
 
