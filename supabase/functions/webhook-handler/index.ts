@@ -157,7 +157,7 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
       console.log(
         `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${existingPayment.id}`
       );
-      await triggerWithdrawalIntegration(existingPayment.id);
+      await triggerWithdrawalIntegration('aqua_invoice_' + webhookData.invoice_id);
     }
 
     return {
@@ -223,41 +223,83 @@ async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
     }
 
     // Get payment details
-    const payment = await db.getPaymentById(paymentId);
+    const payment = await db.getPaymentByExternalId(paymentId);
     if (!payment) {
       console.error(`[WebhookHandler] Payment not found for withdrawal integration: ${paymentId}`);
       return;
     }
 
-    // Only process withdrawals for specific currencies/tokens
+    // Check if this payment has USDC_XLM destination stored in metadata
+    let withdrawalDestination: any = null;
+    let isUSDCXLMWithdrawal = false;
+
+    try {
+      // Try to parse withdrawal destination from metadata
+      const metadata = payment.metadata || {};
+      if (metadata.withdrawal_destination) {
+        withdrawalDestination = metadata.withdrawal_destination;
+        isUSDCXLMWithdrawal =
+          withdrawalDestination.isUSDCXLM === true ||
+          withdrawalDestination.tokenSymbol === 'USDC_XLM';
+      }
+    } catch (error) {
+      console.log(
+        `[WebhookHandler] Could not parse withdrawal destination for ${paymentId}:`,
+        error
+      );
+    }
+
+    // Only process withdrawals for specific currencies/tokens or XLM conversions
     const supportedConversions = ['USDC', 'USDC_XLM', 'XLM']; // Based on original design
     const paymentCurrency = payment.original_request?.destination?.tokenSymbol || payment.currency;
 
-    if (!supportedConversions.includes(paymentCurrency)) {
+    if (!supportedConversions.includes(paymentCurrency) && !isUSDCXLMWithdrawal) {
       console.log(
         `[WebhookHandler] Currency ${paymentCurrency} not supported for withdrawal, skipping: ${paymentId}`
       );
       return;
     }
 
+    // Determine withdrawal details based on whether this is XLM conversion
+    let withdrawalPayload: any;
+
+    if (isUSDCXLMWithdrawal && withdrawalDestination) {
+      console.log(
+        `[WebhookHandler] Processing USDC_XLM withdrawal to Stellar address: ${withdrawalDestination.address}`
+      );
+
+      withdrawalPayload = {
+        amount: payment.amount,
+        to_address: withdrawalDestination.address, // Original Stellar address
+        chain: 'stellar',
+        token: 'USDC', // Convert back to XLM on Stellar
+      };
+    } else {
+      // Regular withdrawal (non-XLM)
+      withdrawalPayload = {
+        amount: payment.amount,
+        to_address: withdrawalDestination.address, // Original Stellar address
+        chain: withdrawalDestination.chainId === '8453' ? 'base' : 'stellar',
+        token: 'USDC',
+      };
+    }
+
     console.log('withdrawalApiUrl', withdrawalApiUrl);
     console.log('withdrawalApiToken', Deno.env.get('WITHDRAWAL_API_TOKEN'));
+    console.log('withdrawalPayload', withdrawalPayload);
 
     // Trigger withdrawal integration
-    const withdrawalResponse = await fetch(`${withdrawalApiUrl}/withdrawals`, {
+    const withdrawalResponse = await fetch(`${withdrawalApiUrl}/functions/v1/withdrawals`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${Deno.env.get('WITHDRAWAL_API_TOKEN') || ''}`,
       },
-      body: JSON.stringify({
-        amount: payment.amount,
-        chain: payment.chain_id === '10001' ? 'base' : 'stellar',
-        token: 'USDC',
-      }),
+      body: JSON.stringify(withdrawalPayload),
     });
 
     if (!withdrawalResponse.ok) {
+      console.log('withdrawalResponse', withdrawalResponse.statusText);
       throw new Error(`Withdrawal API error: ${withdrawalResponse.status}`);
     }
 

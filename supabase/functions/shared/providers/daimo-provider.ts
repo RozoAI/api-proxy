@@ -1,5 +1,5 @@
 // Daimo Provider for Edge Functions
-// Migrated from original Express.js architecture with real API integration
+// Acts as a pure proxy - passes requests through to Daimo using their actual API format
 import { BaseProvider } from './base-provider.ts';
 import type {
   PaymentRequest,
@@ -40,12 +40,6 @@ export class DaimoProvider extends BaseProvider {
       const responseData = JSON.parse(responseText);
       this.logResponse(response, responseData);
 
-      if (!response.ok) {
-        throw new Error(
-          `Daimo API error: ${response.status} - ${responseData.error || 'Unknown error'}`
-        );
-      }
-
       return this.transformFromDaimoResponse(responseData, paymentData);
     } catch (error) {
       this.logError(error as Error, 'createPayment');
@@ -54,10 +48,10 @@ export class DaimoProvider extends BaseProvider {
   }
 
   async getPayment(paymentId: string): Promise<PaymentResponse> {
-    this.logRequest('GET', `${this.config.baseUrl}/link/${paymentId}`);
+    this.logRequest('GET', `${this.config.baseUrl}/api/payment/${paymentId}`);
 
     try {
-      const response = await this.makeRequest(`${this.config.baseUrl}/link/${paymentId}`, {
+      const response = await this.makeRequest(`${this.config.baseUrl}/api/payment/${paymentId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -117,142 +111,131 @@ export class DaimoProvider extends BaseProvider {
     }
   }
 
-  private transformToDaimoRequest(paymentData: PaymentRequest): any {
-    return {
-      display: paymentData.display,
-      destination: {
-        destinationAddress: paymentData.destination.destinationAddress,
-        chainId: parseInt(paymentData.destination.chainId),
-        amountUnits: paymentData.destination.amountUnits,
-        tokenAddress: paymentData.destination.tokenAddress,
-      },
-      metadata: this.serializeMetadata(paymentData.metadata || {}),
-    };
-  }
-
-  private serializeMetadata(metadata: Record<string, any>): Record<string, string> {
-    const serialized: Record<string, string> = {};
-
+  private stringifyMetadata(metadata: Record<string, any>): Record<string, string> {
+    const result: Record<string, string> = {};
     for (const [key, value] of Object.entries(metadata)) {
-      if (value === null || value === undefined) {
-        // Skip null/undefined values
-        continue;
-      }
-
-      if (typeof value === 'string') {
-        // Already a string, use as-is
-        serialized[key] = value;
-      } else if (typeof value === 'number' || typeof value === 'boolean') {
-        // Convert primitives to string
-        serialized[key] = String(value);
-      } else if (Array.isArray(value) || typeof value === 'object') {
-        // Serialize complex objects/arrays to JSON string
-        try {
-          serialized[key] = JSON.stringify(value);
-        } catch (error) {
-          console.warn(`[DaimoProvider] Failed to serialize metadata key "${key}":`, error);
-          serialized[key] = String(value); // Fallback to string conversion
-        }
-      } else {
-        // Fallback for any other type
-        serialized[key] = String(value);
+      if (value !== undefined && value !== null) {
+        result[key] = typeof value === 'string' ? value : JSON.stringify(value);
       }
     }
+    return result;
+  }
 
-    return serialized;
+  private transformToDaimoRequest(paymentData: PaymentRequest): any {
+    // Transform our format to match Daimo's actual API format
+    // Reference: https://paydocs.daimo.com/payments-api#create-a-payment
+
+    // Check if destination token is USDC_XLM - if so, use USDC Base address from env
+    const isUSDCXLMDestination = paymentData.destination.tokenSymbol === 'USDC_XLM';
+
+    console.log('[DEBUG] [daimo] USDC_XLM conversion check:', {
+      preferredToken: paymentData.preferredToken,
+      destinationTokenSymbol: paymentData.destination.tokenSymbol,
+      isUSDCXLMDestination: isUSDCXLMDestination,
+      originalAddress: paymentData.destination.destinationAddress,
+    });
+
+    const finalDestination = isUSDCXLMDestination
+      ? {
+          destinationAddress:
+            Deno.env.get('USDC_BASE_ADDRESS') || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+          chainId: 8453, // Base chain ID
+          tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+          amountUnits: paymentData.destination.amountUnits,
+        }
+      : {
+          destinationAddress: paymentData.destination.destinationAddress,
+          chainId: parseInt(paymentData.destination.chainId),
+          tokenAddress: paymentData.destination.tokenAddress,
+          amountUnits: paymentData.destination.amountUnits,
+        };
+
+    console.log('[DEBUG] [daimo] Final destination:', finalDestination);
+
+    return {
+      display: {
+        intent: paymentData.display.intent,
+        // Map our preferredChain to Daimo's preferredChains array
+        preferredChains: [parseInt(paymentData.preferredChain)],
+        // For XLM, use USDC Base token; otherwise use original
+        ...(finalDestination.tokenAddress && {
+          preferredTokens: [
+            {
+              chain: parseInt(paymentData.preferredChain),
+              address: finalDestination.tokenAddress,
+            },
+          ],
+        }),
+      },
+      destination: finalDestination,
+      // Include optional fields from our metadata
+      ...(paymentData.metadata?.externalId && { externalId: paymentData.metadata.externalId }),
+      metadata: {
+        // Convert all metadata values to strings as required by Daimo
+        ...this.stringifyMetadata(paymentData.metadata || {}),
+        // Store our routing context for tracking
+        preferred_chain: String(paymentData.preferredChain),
+        preferred_token: String(paymentData.preferredToken),
+        // Mark if this is a USDC_XLM conversion
+        is_usdc_xlm_conversion: String(isUSDCXLMDestination),
+        // Store the ORIGINAL withdrawal destination for later processing
+        withdrawal_destination: JSON.stringify({
+          address: paymentData.destination.destinationAddress,
+          chainId: paymentData.destination.chainId,
+          tokenAddress: paymentData.destination.tokenAddress,
+          tokenSymbol: paymentData.destination.tokenSymbol,
+          isUSDCXLM: isUSDCXLMDestination,
+        }),
+      },
+    };
   }
 
   private transformFromDaimoResponse(
     daimoResponse: any,
     originalRequest?: PaymentRequest
   ): PaymentResponse {
+    // Daimo returns the payment object inside a wrapper for create, or directly for get
+    const payment = daimoResponse.payment || daimoResponse;
+
     return {
-      id: daimoResponse.id || `daimo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      status: this.mapDaimoStatus(daimoResponse.status || 'payment_unpaid') as PaymentStatus,
-      createdAt: daimoResponse.createdAt?.toString() || Date.now().toString(),
+      id: payment.id || `daimo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: this.mapDaimoStatus(payment.status || 'payment_unpaid') as PaymentStatus,
+      createdAt: payment.createdAt?.toString() || Date.now().toString(),
       display: {
-        intent: originalRequest?.display.intent || daimoResponse.display?.intent || '',
-        currency: originalRequest?.display.currency || daimoResponse.display?.currency || 'USD',
+        intent: payment.display?.intent || originalRequest?.display.intent || '',
+        currency: payment.display?.currency || originalRequest?.display.currency || 'USD',
       },
-      source: daimoResponse.source || null,
+      source: payment.source || null,
       destination: {
-        destinationAddress:
-          daimoResponse.destination?.destinationAddress ||
-          originalRequest?.destination.destinationAddress ||
-          '',
-        txHash: daimoResponse.destination?.txHash || null,
-        chainId:
-          daimoResponse.destination?.chainId?.toString() ||
-          originalRequest?.destination.chainId ||
-          '',
-        amountUnits:
-          daimoResponse.destination?.amountUnits || originalRequest?.destination.amountUnits || '',
-        tokenSymbol:
-          daimoResponse.destination?.tokenSymbol ||
-          this.getTokenSymbolFromAddress(originalRequest?.destination.tokenAddress),
-        tokenAddress:
-          daimoResponse.destination?.tokenAddress ||
-          originalRequest?.destination.tokenAddress ||
-          '',
+        destinationAddress: payment.destination?.destinationAddress || '',
+        txHash: payment.destination?.txHash || null,
+        chainId: payment.destination?.chainId?.toString() || '',
+        amountUnits: payment.destination?.amountUnits || '',
+        tokenSymbol: payment.destination?.tokenSymbol || '',
+        tokenAddress: payment.destination?.tokenAddress || '',
       },
-      externalId: daimoResponse.externalId || daimoResponse.id || null,
+      externalId: payment.externalId || null,
       metadata: {
-        ...this.deserializeMetadata(daimoResponse.metadata || {}),
-        ...originalRequest?.metadata,
+        ...payment.metadata,
         provider: 'daimo',
+        preferred_chain: originalRequest?.preferredChain || payment.metadata?.preferred_chain,
+        preferred_token: originalRequest?.preferredToken || payment.metadata?.preferred_token,
       },
-      url: daimoResponse.url || `${this.config.baseUrl}/link/${daimoResponse.id}`,
+      url: daimoResponse.url || `${this.config.baseUrl}/checkout?id=${payment.id}`,
     };
-  }
-
-  private deserializeMetadata(metadata: Record<string, string>): Record<string, any> {
-    const deserialized: Record<string, any> = {};
-
-    for (const [key, value] of Object.entries(metadata)) {
-      if (typeof value !== 'string') {
-        deserialized[key] = value;
-        continue;
-      }
-
-      // Try to parse JSON strings back to objects/arrays
-      if (
-        (value.startsWith('{') && value.endsWith('}')) ||
-        (value.startsWith('[') && value.endsWith(']'))
-      ) {
-        try {
-          deserialized[key] = JSON.parse(value);
-        } catch {
-          // If parsing fails, keep as string
-          deserialized[key] = value;
-        }
-      } else {
-        // Keep as string
-        deserialized[key] = value;
-      }
-    }
-
-    return deserialized;
   }
 
   private mapDaimoStatus(daimoStatus: string): string {
+    // Daimo status mapping based on their documentation
     const statusMap: Record<string, string> = {
-      unpaid: 'payment_unpaid',
-      started: 'payment_started',
-      completed: 'payment_completed',
-      bounced: 'payment_bounced',
-      refunded: 'payment_refunded',
+      payment_unpaid: 'payment_unpaid',
+      payment_started: 'payment_started',
+      payment_completed: 'payment_completed',
+      payment_bounced: 'payment_bounced',
+      // Note: Daimo doesn't mention payment_refunded in current docs, but keeping for compatibility
+      payment_refunded: 'payment_refunded',
     };
 
     return statusMap[daimoStatus] || daimoStatus;
-  }
-
-  private getTokenSymbolFromAddress(tokenAddress?: string): string {
-    // Common token address to symbol mapping
-    const tokenMap: Record<string, string> = {
-      '0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b': 'USDC',
-      '0x0000000000000000000000000000000000000000': 'ETH',
-    };
-
-    return tokenMap[tokenAddress || ''] || 'UNKNOWN';
   }
 }

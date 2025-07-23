@@ -1,5 +1,5 @@
 // Aqua Provider for Edge Functions
-// Migrated from original Express.js architecture with real API integration
+// Uses mapped addresses for USDC_XLM and XLM tokens
 import { BaseProvider } from './base-provider.ts';
 import type {
   PaymentRequest,
@@ -121,10 +121,12 @@ export class AquaProvider extends BaseProvider {
   }
 
   private transformToAquaRequest(paymentData: PaymentRequest): any {
-    const tokenId = this.getAquaTokenId(paymentData.destination.tokenSymbol || '');
+    const tokenId = this.getAquaTokenId(paymentData.preferredToken);
+    // Use mapped address for the specific token (USDC_XLM or XLM)
+    const mappedAddress = this.getMappedAddressForToken(paymentData.preferredToken);
 
     return {
-      recipient: paymentData.destination.destinationAddress,
+      recipient: mappedAddress, // Use mapped address for USDC_XLM or XLM
       token: tokenId,
       amount: paymentData.destination.amountUnits,
       description: paymentData.display.intent,
@@ -133,16 +135,50 @@ export class AquaProvider extends BaseProvider {
         daimo_external_id: this.generateExternalId(paymentData),
         daimo_intent: paymentData.display.intent,
         daimo_currency: paymentData.display.currency,
+        // Store withdrawal information for later use
+        withdrawal_destination: {
+          address: paymentData.destination.destinationAddress,
+          chainId: paymentData.destination.chainId,
+          tokenSymbol: paymentData.destination.tokenSymbol,
+          amountUnits: paymentData.destination.amountUnits,
+        },
+        preferred_chain: paymentData.preferredChain,
+        preferred_token: paymentData.preferredToken,
         original_metadata: paymentData.metadata || {},
       },
     };
+  }
+
+  private getMappedAddressForToken(token: string): string {
+    // Mapped addresses for different tokens on Stellar
+    const tokenAddressMap: Record<string, string> = {
+      XLM:
+        Deno.env.get('AQUA_XLM_ADDRESS') ||
+        'GDQDR7RY2GJW7XBENWAX7F5X42HBTA2YREAD6SYGZLUNDGDQ3DRRYBPK',
+      USDC_XLM:
+        Deno.env.get('AQUA_USDC_XLM_ADDRESS') ||
+        'GDQDR7RY2GJW7XBENWAX7F5X42HBTA2YREAD6SYGZLUNDGDQ3DRRYBPK',
+      USDC:
+        Deno.env.get('AQUA_USDC_XLM_ADDRESS') ||
+        'GDQDR7RY2GJW7XBENWAX7F5X42HBTA2YREAD6SYGZLUNDGDQ3DRRYBPK', // Map USDC to USDC_XLM address
+    };
+
+    const mappedAddress = tokenAddressMap[token];
+    if (
+      !mappedAddress ||
+      mappedAddress === 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+    ) {
+      console.warn(`[AquaProvider] No mapped address configured for token: ${token}`);
+    }
+
+    return mappedAddress || 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
   }
 
   private transformFromAquaResponse(
     aquaResponse: any,
     originalRequest?: PaymentRequest
   ): PaymentResponse {
-    const paymentId = `aqua_invoice_${aquaResponse.invoice_id || Date.now()}}`;
+    const paymentId = `aqua_invoice_${aquaResponse.invoice_id || Date.now()}`;
 
     return {
       id: paymentId,
@@ -155,15 +191,21 @@ export class AquaProvider extends BaseProvider {
         currency:
           originalRequest?.display.currency || aquaResponse.metadata?.daimo_currency || 'USD',
       },
-      source: null, // Aqua doesn't provide source information
+      source: null, // Aqua doesn't provide source information initially
       destination: {
         destinationAddress:
-          aquaResponse.address || originalRequest?.destination.destinationAddress || '',
+          originalRequest?.destination.destinationAddress ||
+          aquaResponse.metadata?.withdrawal_destination?.address ||
+          aquaResponse.address ||
+          '',
         txHash: aquaResponse.transaction_hash || null,
-        chainId: '10001', // Stellar chain ID
+        chainId: originalRequest?.destination.chainId || '10001', // Default to Stellar
         amountUnits:
-          aquaResponse.amount?.toString() || originalRequest?.destination.amountUnits || '',
-        tokenSymbol: this.mapAquaTokenToSymbol(aquaResponse.token_id),
+          originalRequest?.destination.amountUnits || aquaResponse.amount?.toString() || '',
+        tokenSymbol:
+          originalRequest?.destination.tokenSymbol ||
+          originalRequest?.preferredToken ||
+          this.mapAquaTokenToSymbol(aquaResponse.token_id),
         tokenAddress: '', // Stellar doesn't use token addresses
       },
       externalId: aquaResponse.metadata?.daimo_external_id || aquaResponse.invoice_id || null,
@@ -175,6 +217,10 @@ export class AquaProvider extends BaseProvider {
         aqua_token_id: aquaResponse.token_id,
         aqua_status: aquaResponse.status,
         aqua_status_updated_at: aquaResponse.status_updated_at_t,
+        preferred_chain: originalRequest?.preferredChain,
+        preferred_token: originalRequest?.preferredToken,
+        provider: 'aqua',
+        mapped_address: this.getMappedAddressForToken(originalRequest?.preferredToken || 'XLM'),
       },
       url: `${this.config.baseUrl}/checkout?id=${aquaResponse.invoice_id}`,
     };
@@ -196,7 +242,7 @@ export class AquaProvider extends BaseProvider {
     const tokenMap: Record<string, string> = {
       XLM: 'XLM',
       USDC_XLM: 'USDC_XLM',
-      USDC: 'USDC_XLM',
+      USDC: 'USDC_XLM', // Map USDC to USDC_XLM for Stellar
     };
 
     return tokenMap[tokenSymbol] || 'XLM';
@@ -209,7 +255,7 @@ export class AquaProvider extends BaseProvider {
       usdc_xlm: 'USDC_XLM',
     };
 
-    return tokenMap[aquaTokenId] || 'XLM';
+    return tokenMap[aquaTokenId?.toLowerCase()] || 'XLM';
   }
 
   private generateExternalId(paymentData: PaymentRequest): string {

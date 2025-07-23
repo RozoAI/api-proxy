@@ -31,14 +31,24 @@ export class PaymentDatabase {
     }
 
     const paymentData = {
-      amount: amount, // Use parsed amount to ensure it's a number
+      amount: amount, // Use withdrawal amount for database storage
       currency: paymentRequest.display.currency,
       status: paymentResponse.status,
       external_id: paymentResponse.id,
       provider_name: providerName,
-      chain_id: paymentRequest.destination.chainId,
+      chain_id: paymentRequest.preferredChain, // Store preferred chain for routing
       provider_response: paymentResponse,
-      metadata: paymentRequest.metadata || null,
+      metadata: {
+        ...paymentRequest.metadata,
+        preferred_chain: paymentRequest.preferredChain,
+        preferred_token: paymentRequest.preferredToken,
+        withdrawal_destination: {
+          address: paymentRequest.destination.destinationAddress,
+          chainId: paymentRequest.destination.chainId,
+          tokenAddress: paymentRequest.destination.tokenAddress,
+          tokenSymbol: paymentRequest.destination.tokenSymbol,
+        },
+      },
       original_request: paymentRequest,
     };
 
@@ -52,6 +62,14 @@ export class PaymentDatabase {
       console.error('[Database] Error creating payment:', error);
       throw new Error(`Failed to create payment: ${error.message}`);
     }
+
+    console.log('[Database] Payment created:', {
+      id: data.id,
+      external_id: data.external_id,
+      preferred_chain: paymentRequest.preferredChain,
+      preferred_token: paymentRequest.preferredToken,
+      withdrawal_address: paymentRequest.destination.destinationAddress,
+    });
 
     return data;
   }
@@ -113,6 +131,11 @@ export class PaymentDatabase {
       return false;
     }
 
+    console.log('[Database] Payment status updated:', {
+      external_id: paymentId,
+      status: status,
+    });
+
     return true;
   }
 
@@ -129,6 +152,11 @@ export class PaymentDatabase {
       console.error('[Database] Error updating payment with withdraw ID:', error);
       return false;
     }
+
+    console.log('[Database] Payment updated with withdraw ID:', {
+      payment_id: paymentId,
+      withdraw_id: withdrawId,
+    });
 
     return true;
   }
@@ -153,15 +181,43 @@ export class PaymentDatabase {
   }
 
   convertToPaymentResponse(record: PaymentRecord): PaymentResponse {
+    const originalRequest = record.original_request;
+    const withdrawalDestination = record.metadata?.withdrawal_destination;
+
     return {
       id: record.external_id || record.id,
       status: record.status as any,
       createdAt: Math.floor(new Date(record.created_at).getTime() / 1000).toString(),
-      display: record.original_request.display,
+      display: originalRequest?.display || {
+        intent: 'Payment',
+        currency: record.currency,
+      },
       source: null,
-      destination: record.original_request.destination,
+      destination: {
+        destinationAddress:
+          withdrawalDestination?.address || originalRequest?.destination?.destinationAddress || '',
+        txHash: null,
+        chainId:
+          withdrawalDestination?.chainId ||
+          originalRequest?.destination?.chainId ||
+          record.chain_id,
+        amountUnits: originalRequest?.destination?.amountUnits || record.amount.toString(),
+        tokenSymbol:
+          withdrawalDestination?.tokenSymbol ||
+          originalRequest?.destination?.tokenSymbol ||
+          record.metadata?.preferred_token ||
+          '',
+        tokenAddress:
+          withdrawalDestination?.tokenAddress || originalRequest?.destination?.tokenAddress || '',
+      },
       externalId: record.external_id,
-      metadata: record.metadata || null,
+      metadata: {
+        ...record.metadata,
+        provider: record.provider_name,
+        preferred_chain: record.metadata?.preferred_chain || record.chain_id,
+        preferred_token: record.metadata?.preferred_token,
+        withdrawal_destination: withdrawalDestination,
+      },
     };
   }
 
