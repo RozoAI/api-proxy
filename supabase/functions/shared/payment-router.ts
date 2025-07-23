@@ -72,15 +72,17 @@ export class PaymentRouter {
   }
 
   async createPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
-    const chainId = parseInt(paymentData.destination.chainId);
-    const providerName = this.getProviderForChain(paymentData.destination.chainId);
+    const chainId = parseInt(paymentData.preferredChain);
+    const providerName = this.getProviderForChain(paymentData.preferredChain);
     const provider = this.providers.get(providerName);
 
     if (!provider) {
       throw new Error(`Provider ${providerName} not available for chain ${chainId}`);
     }
 
-    console.log(`[PaymentRouter] Routing payment to ${providerName} for chain ${chainId}`);
+    console.log(
+      `[PaymentRouter] Routing payment to ${providerName} for preferred chain ${chainId}, preferred token ${paymentData.preferredToken}`
+    );
 
     // Validate request based on provider
     this.validatePaymentRequest(paymentData, providerName);
@@ -130,69 +132,53 @@ export class PaymentRouter {
   }
 
   private validatePaymentRequest(paymentData: PaymentRequest, providerName: string): void {
-    const { destination } = paymentData;
+    const { destination, preferredChain, preferredToken } = paymentData;
 
     // Validate required fields
     if (!destination.destinationAddress) {
-      throw new Error('Destination address is required');
+      throw new Error('Destination address is required for withdrawal');
     }
 
     if (!destination.amountUnits || parseFloat(destination.amountUnits) <= 0) {
-      throw new Error('Valid amount is required');
+      throw new Error('Valid withdrawal amount is required');
+    }
+
+    if (!preferredChain) {
+      throw new Error('Preferred chain is required for payment routing');
+    }
+
+    if (!preferredToken) {
+      throw new Error('Preferred token is required for payment processing');
     }
 
     // Provider-specific validation
     if (providerName === 'aqua') {
       this.validateAquaRequest(paymentData);
-    } else if (providerName === 'daimo') {
-      this.validateDaimoRequest(paymentData);
     }
   }
 
   private validateAquaRequest(paymentData: PaymentRequest): void {
-    const { destination } = paymentData;
+    const { destination, preferredToken } = paymentData;
     const provider = this.providers.get('aqua') as AquaProvider;
 
-    // Validate Stellar address
-    if (!provider.isValidStellarAddress(destination.destinationAddress)) {
-      throw new Error('Invalid Stellar address format');
-    }
-
-    // Validate amount (Stellar supports up to 7 decimal places)
+    // Validate withdrawal amount (destination)
     if (!provider.isValidStellarAmount(destination.amountUnits)) {
-      throw new Error('Invalid amount format for Stellar (max 7 decimal places)');
+      throw new Error('Invalid withdrawal amount format for Stellar (max 7 decimal places)');
     }
 
-    // Validate token symbol is provided for Aqua
-    if (!destination.tokenSymbol) {
-      throw new Error('Token symbol is required for Stellar payments');
-    }
-
-    // Validate supported tokens
+    // Validate preferred token for payment processing
     const supportedTokens = ['XLM', 'USDC_XLM', 'USDC'];
-    if (!supportedTokens.includes(destination.tokenSymbol)) {
+    if (!supportedTokens.includes(preferredToken)) {
       throw new Error(
-        `Unsupported token: ${destination.tokenSymbol}. Supported: ${supportedTokens.join(', ')}`
+        `Unsupported preferred token: ${preferredToken}. Supported: ${supportedTokens.join(', ')}`
       );
     }
-  }
 
-  private validateDaimoRequest(paymentData: PaymentRequest): void {
-    const { destination } = paymentData;
-
-    // Validate Ethereum address format
-    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-    if (!ethAddressRegex.test(destination.destinationAddress)) {
-      throw new Error('Invalid Ethereum address format');
-    }
-
-    // Validate token address is provided for Daimo
-    if (!destination.tokenAddress) {
-      throw new Error('Token address is required for EVM payments');
-    }
-
-    if (!ethAddressRegex.test(destination.tokenAddress)) {
-      throw new Error('Invalid token address format');
+    // Validate withdrawal token symbol if provided
+    if (destination.tokenSymbol && !supportedTokens.includes(destination.tokenSymbol)) {
+      throw new Error(
+        `Unsupported withdrawal token: ${destination.tokenSymbol}. Supported: ${supportedTokens.join(', ')}`
+      );
     }
   }
 

@@ -14,16 +14,25 @@ export class PaymentService {
   }
 
   async createPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
-    console.log('[PaymentService] Creating payment:', paymentData);
+    console.log('[PaymentService] Creating payment:', {
+      preferredChain: paymentData.preferredChain,
+      preferredToken: paymentData.preferredToken,
+      withdrawalAddress: paymentData.destination.destinationAddress,
+      withdrawalAmount: paymentData.destination.amountUnits,
+    });
 
-    // Route to appropriate provider based on chain ID
+    // Route to appropriate provider based on preferred chain
     const paymentResponse = await this.router.createPayment(paymentData);
 
-    // Save to database
-    const providerName = this.router.getProviderForChain(paymentData.destination.chainId);
+    // Save to database with routing information
+    const providerName = this.router.getProviderForChain(paymentData.preferredChain);
     await this.db.createPayment(paymentData, paymentResponse, providerName);
 
-    console.log('[PaymentService] Payment created successfully:', paymentResponse.id);
+    console.log('[PaymentService] Payment created successfully:', {
+      paymentId: paymentResponse.id,
+      provider: providerName,
+      status: paymentResponse.status,
+    });
     return paymentResponse;
   }
 
@@ -39,8 +48,11 @@ export class PaymentService {
         console.log('[PaymentService] Payment is stale, fetching fresh data');
 
         try {
-          // Fetch fresh data from provider
-          const freshPayment = await this.router.getPayment(paymentId, cachedPayment.chain_id);
+          // Fetch fresh data from provider using the original preferred chain
+          const originalRequest = cachedPayment.original_request;
+          const preferredChain = originalRequest?.preferredChain || cachedPayment.chain_id;
+
+          const freshPayment = await this.router.getPayment(paymentId, preferredChain);
 
           // Update database with fresh data
           await this.db.updatePaymentStatus(paymentId, freshPayment.status);
@@ -75,10 +87,13 @@ export class PaymentService {
         console.log('[PaymentService] Payment is stale, fetching fresh data');
 
         try {
-          // Fetch fresh data from provider using the payment ID
+          // Fetch fresh data from provider using the external ID and original preferred chain
+          const originalRequest = cachedPayment.original_request;
+          const preferredChain = originalRequest?.preferredChain || cachedPayment.chain_id;
+
           const freshPayment = await this.router.getPayment(
             cachedPayment.external_id!,
-            cachedPayment.chain_id
+            preferredChain
           );
 
           // Update database with fresh data

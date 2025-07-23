@@ -6,16 +6,18 @@ export interface PaymentRequest {
     intent: string;
     currency: string;
   };
-  destination: PaymentDestination;
+  preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
+  preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")
+  destination: PaymentDestination; // For withdrawal after payment completion
   metadata?: Record<string, any>;
 }
 
 export interface PaymentDestination {
-  destinationAddress: string;
-  chainId: string;
-  amountUnits: string;
-  tokenAddress?: string;
-  tokenSymbol?: string;
+  destinationAddress: string; // Address for withdrawal
+  chainId: string; // Chain for withdrawal
+  amountUnits: string; // Amount for withdrawal
+  tokenAddress?: string; // Token address for withdrawal (EVM chains)
+  tokenSymbol?: string; // Token symbol for withdrawal
 }
 
 export interface PaymentResponse {
