@@ -90,27 +90,28 @@ serve(async (req) => {
 });
 
 async function handleDaimoWebhook(webhookData: DaimoWebhookEvent): Promise<any> {
-  console.log(`[WebhookHandler] Processing Daimo webhook for payment: ${webhookData.paymentId}`);
+  const externalId = webhookData.payment.externalId || webhookData.paymentId;
+  console.log(`[WebhookHandler] Processing Daimo webhook for payment: ${externalId}`);
 
   try {
     // Map Daimo webhook event types to our status
     const status = mapDaimoWebhookEventToStatus(webhookData.type);
 
     // Update payment status in database
-    await db.updatePaymentStatus(webhookData.paymentId, status);
+    await db.updatePaymentStatus(externalId, status);
 
     // If payment is completed, trigger withdrawal integration
     if (status === 'payment_completed') {
       console.log(
-        `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${webhookData.paymentId}`
+        `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${externalId}`
       );
-      await triggerWithdrawalIntegration(webhookData.paymentId);
+      await triggerWithdrawalIntegration(externalId);
     }
 
     return {
       success: true,
       message: 'Daimo webhook processed successfully',
-      paymentId: webhookData.paymentId,
+      paymentId: externalId,
       status: status,
       processed_at: new Date().toISOString(),
     };
@@ -142,7 +143,7 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
     }
 
     // Update payment status
-    await db.updatePaymentStatus(existingPayment.id, status);
+    await db.updatePaymentStatus('aqua_invoice_' + webhookData.invoice_id, status);
 
     // Update payment with transaction hash if provided
     if (webhookData.transaction_hash && status === 'payment_completed') {
