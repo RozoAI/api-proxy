@@ -80,6 +80,11 @@ This document provides detailed API specifications for all Supabase Edge Functio
 - **Process**: Payment routed to Daimo as USDC → Converted to XLM → Withdrawn to Stellar address
 - **Result**: User pays with any supported token via Daimo, receives XLM on Stellar
 
+**🏦 Base Chain Deposit Address Integration**
+- **When**: `preferredChain: "8453"` (Base chain payments via Daimo)
+- **Process**: After Daimo payment creation → Fetch deposit address from Rozo API → Set as destination address
+- **Result**: User gets deposit address in destination field and expiration time for Base chain payments
+
 **Response**:
 ```json
 {
@@ -106,11 +111,19 @@ This document provides detailed API specifications for all Supabase Edge Functio
     "provider": "daimo",
     "preferred_chain": "8453",
     "preferred_token": "USDC",
-    "is_usdc_xlm_conversion": "true"
+    "is_usdc_xlm_conversion": "true",
+    "deposit_expiration": 1753710606
   },
-  "url": "https://checkout.daimo.com/payment_abc123"
+  "url": "https://checkout.daimo.com/payment_abc123",
+  "depositExpiration": 1753710606
 }
 ```
+
+**🔍 Base Chain Deposit Address**:
+- **For Base chain payments only**: System automatically fetches deposit address from Rozo API
+- **destination.destinationAddress**: Contains deposit address where user should send payment (Base chain)
+- **depositExpiration**: Unix timestamp when deposit address expires
+- **Automatic Integration**: No additional configuration required
 
 **Status Codes**:
 - `201` - Payment created successfully
@@ -185,7 +198,7 @@ This document provides detailed API specifications for all Supabase Edge Functio
 **Path Parameters**:
 - `externalId` (string, required): External provider payment ID
 
-**Response**: Same as Get Payment by ID
+**Response**: Same as Get Payment by ID, including deposit address details for Base chain payments
 
 **Status Codes**:
 - `200` - Payment found
@@ -617,6 +630,22 @@ curl -X POST http://localhost:54321/functions/v1/payment-api \
       "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
       "chainId": "8453",
       "amountUnits": "10.00",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    }
+  }'
+
+# Test Base chain payment with deposit address (will include depositAddress and depositExpiration)
+curl -X POST http://localhost:54321/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {"intent": "Test Base Payment with Deposit Address", "currency": "USD"},
+    "preferredChain": "8453",
+    "preferredToken": "USDC",
+    "destination": {
+      "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
+      "chainId": "8453",
+      "amountUnits": "5.00",
       "tokenSymbol": "USDC",
       "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     }
