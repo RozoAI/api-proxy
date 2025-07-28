@@ -238,7 +238,9 @@ export class DaimoProvider extends BaseProvider {
           deposit_expiration: depositAddressDetails.expirationS,
         }),
       },
-      url: daimoResponse.url || `${this.config.baseUrl}/checkout?id=${payment.id}`,
+      url:
+        daimoResponse.url?.replace('https://pay.daimo.com', 'https://intentapi.rozo.ai') ||
+        `${this.config.baseUrl}/checkout?id=${payment.id}`,
       // Add deposit expiration for Base chain payments
       ...(depositAddressDetails && {
         depositExpiration: depositAddressDetails.expirationS,
