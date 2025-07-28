@@ -33,6 +33,8 @@ export interface PaymentResponse {
   externalId?: string;
   metadata?: Record<string, any>;
   url?: string;
+  // Deposit expiration for Base chain payments (Daimo provider)
+  depositExpiration?: number;
 }
 
 export interface PaymentSource {

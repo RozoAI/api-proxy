@@ -292,6 +292,8 @@ export class PaymentDatabase {
         withdrawal_tx_hash: record.withdrawal_tx_hash,
         source_address: record.source_address,
         source_tx_hash: record.source_tx_hash,
+        // Deposit expiration for Base chain payments
+        deposit_expiration: record.metadata?.deposit_expiration,
       },
     };
   }
