@@ -28,12 +28,14 @@ This document provides detailed API specifications for all Supabase Edge Functio
     "intent": "Payment for services",
     "currency": "USD"
   },
+  "preferredChain": "8453",
+  "preferredToken": "USDC",
   "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "chainId": "1",
+    "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+    "chainId": "10001",
     "amountUnits": "10.00",
-    "tokenSymbol": "ETH",
-    "tokenAddress": "0x0000000000000000000000000000000000000000"
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "metadata": {
     "orderId": "12345",
@@ -48,24 +50,35 @@ This document provides detailed API specifications for all Supabase Edge Functio
 |-------|------|----------|-------------|
 | `display.intent` | string | ✅ | Human-readable payment description |
 | `display.currency` | string | ✅ | Currency code (USD, EUR, etc.) |
-| `destination.destinationAddress` | string | ✅ | Recipient address (Ethereum/Stellar) |
-| `destination.chainId` | string | ✅ | Blockchain chain ID |
+| `preferredChain` | string | ✅ | **ROUTING**: Chain ID for payment processing (routes to Daimo/Aqua) |
+| `preferredToken` | string | ✅ | **ROUTING**: Token symbol for payment processing (USDC, USDC_XLM, XLM) |
+| `destination.destinationAddress` | string | ✅ | **WITHDRAWAL**: Final recipient address for funds withdrawal |
+| `destination.chainId` | string | ✅ | **WITHDRAWAL**: Final destination chain ID for withdrawal |
 | `destination.amountUnits` | string | ✅ | Payment amount (must be > 0) |
-| `destination.tokenSymbol` | string | ❌ | Token symbol (ETH, USDC, XLM, etc.) |
-| `destination.tokenAddress` | string | ❌ | Token contract address (EVM chains) |
+| `destination.tokenSymbol` | string | ✅ | **WITHDRAWAL**: Final token symbol for withdrawal |
+| `destination.tokenAddress` | string | ❌ | **WITHDRAWAL**: Final token contract address |
 | `metadata` | object | ❌ | Additional payment metadata |
 
-**Supported Chain IDs**:
+**🔄 Two-Stage Architecture**:
+- **Stage 1 - Payment Routing**: `preferredChain` + `preferredToken` determine which provider (Daimo/Aqua) processes the payment
+- **Stage 2 - Withdrawal**: After payment completion, funds are withdrawn to `destination` address using stored details
 
-| Chain | ID | Provider | Supported Tokens |
-|-------|----|----------|------------------|
-| Ethereum | `1` | Daimo | ETH, USDC, USDT, etc. |
-| Optimism | `10` | Daimo | ETH, USDC, USDT, etc. |
-| Polygon | `137` | Daimo | MATIC, USDC, USDT, etc. |
-| Arbitrum | `42161` | Daimo | ETH, USDC, USDT, etc. |
-| Base | `8453` | Daimo | ETH, USDC, USDT, etc. |
-| BSC | `56` | Daimo | BNB, USDC, USDT, etc. |
-| Stellar | `10001` | Aqua | XLM, USDC_XLM |
+**Payment Routing (preferredChain)**:
+
+| Chain | ID | Provider | Supported Tokens | Use Case |
+|-------|----|----------|------------------|----------|
+| Ethereum | `1` | Daimo | ETH, USDC, USDT, etc. | EVM payments |
+| Optimism | `10` | Daimo | ETH, USDC, USDT, etc. | L2 payments |
+| Polygon | `137` | Daimo | MATIC, USDC, USDT, etc. | Low-cost payments |
+| Arbitrum | `42161` | Daimo | ETH, USDC, USDT, etc. | L2 payments |
+| Base | `8453` | Daimo | ETH, USDC, USDT, etc. | Coinbase ecosystem |
+| BSC | `56` | Daimo | BNB, USDC, USDT, etc. | BSC ecosystem |
+| Stellar | `10001` | Aqua | XLM, USDC_XLM | Stellar ecosystem |
+
+**🔄 Special Conversion Flow: USDC_XLM**
+- **When**: `preferredToken: "USDC"` + `destination.tokenSymbol: "USDC_XLM"`
+- **Process**: Payment routed to Daimo as USDC → Converted to XLM → Withdrawn to Stellar address
+- **Result**: User pays with any supported token via Daimo, receives XLM on Stellar
 
 **Response**:
 ```json
@@ -79,19 +92,23 @@ This document provides detailed API specifications for all Supabase Edge Functio
   },
   "source": null,
   "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
     "txHash": null,
-    "chainId": "1",
+    "chainId": "10001",
     "amountUnits": "10.00",
-    "tokenSymbol": "ETH",
-    "tokenAddress": "0x0000000000000000000000000000000000000000"
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "externalId": "ext_123",
   "metadata": {
     "orderId": "12345",
-    "customerId": "cust_123"
+    "customerId": "cust_123",
+    "provider": "daimo",
+    "preferred_chain": "8453",
+    "preferred_token": "USDC",
+    "is_usdc_xlm_conversion": "true"
   },
-  "url": "https://checkout.example.com/payment_abc123"
+  "url": "https://checkout.daimo.com/payment_abc123"
 }
 ```
 
@@ -121,18 +138,33 @@ This document provides detailed API specifications for all Supabase Edge Functio
     "intent": "Payment for services",
     "currency": "USD"
   },
-  "source": null,
-  "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-    "txHash": "0x1234567890abcdef...",
-    "chainId": "1",
+  "source": {
+    "payerAddress": "0x46ffEA895b5a2E9966e47eC8a2328D2",
+    "txHash": "0x56aaf21e6ae6ffbae98325c8e29678800e50b",
+    "chainId": "8453",
     "amountUnits": "10.00",
-    "tokenSymbol": "ETH",
-    "tokenAddress": "0x0000000000000000000000000000000000000000"
+    "tokenSymbol": "USDC",
+    "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b5"
+  },
+  "destination": {
+    "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+    "txHash": "050bbe74da18bc6d9a3543b54b10a8e409a8bf1396f6dac87b6cf8e7b9ede171",
+    "chainId": "10001",
+    "amountUnits": "10.00",
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "externalId": "ext_123",
   "metadata": {
-    "orderId": "12345"
+    "orderId": "12345",
+    "provider": "daimo",
+    "preferred_chain": "8453",
+    "preferred_token": "USDC",
+    "is_usdc_xlm_conversion": "true",
+    "withdraw_id": "WD_1753380725494_3ith7x0k6",
+    "withdrawal_tx_hash": "050bbe74da18bc6d9a3543b54b10a8e409a8bf1396f6dac87b6cf8e7b9ede171",
+    "source_address": "0x46ffEA895b5a2E9966e47eC8a2328D2",
+    "source_tx_hash": "0x56aaf21e6ae6ffbae98325c8e29678800e50b"
   }
 }
 ```
@@ -180,16 +212,48 @@ This document provides detailed API specifications for all Supabase Edge Functio
 ```json
 {
   "type": "payment_completed",
-  "paymentId": "payment_123",
-  "chainId": 10,
-  "txHash": "0x1234567890abcdef...",
+  "paymentId": "4WBeiCJbXiuWDxNrHfpAJZ1mqXZ5D6W4eDUDE7cyD187",
+  "chainId": 8453,
+  "txHash": "0x03dd8776b732586874771e85458aedff15ec4d887c936eb935c446211a452c0a",
   "payment": {
-    "amount": "1000000",
-    "currency": "USD",
-    "recipient": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6"
+    "id": "4WBeiCJbXiuWDxNrHfpAJZ1mqXZ5D6W4eDUDE7cyD187",
+    "status": "payment_completed",
+    "createdAt": "1753290541",
+    "display": {
+      "intent": "Pay",
+      "paymentValue": "0.10",
+      "currency": "USD"
+    },
+    "source": {
+      "payerAddress": "0xbf3BA31aA1a54fEe4e8808fe12E3bf852309D572",
+      "txHash": "0x48ff9123e4a1ed2fb5476276832d863f55244618d44a964460a1924430a2cbcd",
+      "chainId": "8453",
+      "amountUnits": "0.1",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    },
+    "destination": {
+      "destinationAddress": "0xa85160a17bFF4B2924881bB4C1708177927643b7",
+      "txHash": "0x03dd8776b732586874771e85458aedff15ec4d887c936eb935c446211a452c0a",
+      "chainId": "8453",
+      "amountUnits": "0.1",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    },
+    "metadata": {
+      "preferred_chain": "8453",
+      "preferred_token": "USDC",
+      "is_usdc_xlm_conversion": "true",
+      "withdrawal_destination": "{\"address\":\"GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6\",\"chainId\":\"10001\",\"tokenSymbol\":\"USDC_XLM\"}"
+    }
   }
 }
 ```
+
+**🔍 Source Transaction Extraction**:
+- **payerAddress**: Extracted from `payment.source.payerAddress` and saved to database
+- **txHash**: Extracted from `payment.source.txHash` and saved as source transaction hash
+- **Automatic Processing**: Source details are automatically saved when webhook type is `payment_completed`
 
 **Webhook Event Types**:
 - `payment_started` - Payment initiated
@@ -202,9 +266,15 @@ This document provides detailed API specifications for all Supabase Edge Functio
 {
   "success": true,
   "message": "Daimo webhook processed successfully",
-  "paymentId": "payment_123",
+  "paymentId": "4WBeiCJbXiuWDxNrHfpAJZ1mqXZ5D6W4eDUDE7cyD187",
   "status": "payment_completed",
-  "processedAt": "2024-01-01T00:00:00.000Z"
+  "processed_at": "2024-01-01T00:00:00.000Z",
+  "source_transaction": {
+    "address": "0xbf3BA31aA1a54fEe4e8808fe12E3bf852309D572",
+    "tx_hash": "0x48ff9123e4a1ed2fb5476276832d863f55244618d44a964460a1924430a2cbcd",
+    "saved": true
+  },
+  "withdrawal_triggered": true
 }
 ```
 
@@ -219,14 +289,38 @@ This document provides detailed API specifications for all Supabase Edge Functio
 **Request Body**:
 ```json
 {
-  "invoice_id": "aqua_invoice_123",
+  "invoice_id": "27ee63e4-6f47-48b8-aeba-efc91ff844e4",
+  "mode": "default",
   "status": "paid",
-  "amount": 100.50,
-  "address": "GABCDEFGHIJKLMNOPQRSTUVWXYZ123456789012345678901234567890",
-  "token_id": "usdc",
-  "transaction_hash": "stellar_tx_hash_123"
+  "status_updated_at_t": 1753178190000,
+  "created_at_t": 1753178189834,
+  "address": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+  "from": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FMWXVN4",
+  "amount": 0.01,
+  "callback_url": "https://your-project.supabase.co/functions/v1/webhook-handler?provider=aqua&token=webhook_token",
+  "transaction_hash": "d489f9b6f5401d5f09695a6e3601b9b9f65b9ba940b88adb28a7d2f7fd0d3dd0",
+  "token_id": "USDC_XLM",
+  "metadata": {
+    "daimo_intent": "Pay",
+    "daimo_currency": "USD",
+    "daimo_external_id": "pay_1753197989500_fbjvbp",
+    "original_metadata": {
+      "items": [],
+      "payer": {},
+      "intent": "Pay",
+      "daimoOrderId": "1234455666"
+    }
+  },
+  "cover_percent": null,
+  "cover_amount": null,
+  "cover_operator": "both"
 }
 ```
+
+**🔍 Source Transaction Extraction**:
+- **from**: Payer's Stellar address extracted and saved to database
+- **transaction_hash**: Stellar transaction hash extracted and saved as source transaction hash
+- **Automatic Processing**: Source details are automatically saved when webhook status is `paid`
 
 **Aqua Status Values**:
 - `created` - Invoice created
@@ -240,10 +334,15 @@ This document provides detailed API specifications for all Supabase Edge Functio
 {
   "success": true,
   "message": "Aqua webhook processed successfully",
-  "invoice_id": "aqua_invoice_123",
-  "payment_id": "payment_abc123",
+  "invoice_id": "27ee63e4-6f47-48b8-aeba-efc91ff844e4",
+  "payment_id": "aqua_invoice_27ee63e4-6f47-48b8-aeba-efc91ff844e4",
   "status": "payment_completed",
-  "transaction_hash": "stellar_tx_hash_123",
+  "source_transaction": {
+    "address": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FMWXVN4",
+    "tx_hash": "d489f9b6f5401d5f09695a6e3601b9b9f65b9ba940b88adb28a7d2f7fd0d3dd0",
+    "saved": true
+  },
+  "withdrawal_triggered": true,
   "processed_at": "2024-01-01T00:00:00.000Z"
 }
 ```
@@ -406,27 +505,86 @@ X-RateLimit-Reset: 1640995200
 }
 ```
 
+## 🔄 Transaction Tracking Flow
+
+### Complete Transaction Chain
+
+The system provides end-to-end transaction tracking from initial payment through final withdrawal:
+
+1. **Payment Creation** → `preferredChain` + `preferredToken` routing
+2. **Provider Processing** → Daimo/Aqua processes payment
+3. **Webhook Receipt** → Source transaction details extracted and saved
+4. **Withdrawal Triggered** → Funds sent to final destination
+5. **Withdrawal Complete** → Withdrawal transaction hash saved
+
+### Transaction Data Sources
+
+| Stage | Data Source | Fields Extracted | Saved To |
+|-------|-------------|------------------|----------|
+| **Payment Creation** | API Request | `preferredChain`, `preferredToken`, `destination` | `metadata` |
+| **Daimo Webhook** | `payment.source` | `payerAddress`, `txHash` | `source_address`, `source_tx_hash` |
+| **Aqua Webhook** | Webhook payload | `from`, `transaction_hash` | `source_address`, `source_tx_hash` |
+| **Withdrawal Response** | Withdrawal API | `withdraw_id`, `transaction_hash` | `withdraw_id`, `withdrawal_tx_hash` |
+
+### Enhanced Get Payment Response
+
+After complete transaction flow, the Get Payment API returns:
+
+```json
+{
+  "id": "payment_abc123",
+  "status": "payment_completed",
+  "source": {
+    "payerAddress": "0x46ffEA895b5a2E9966e47eC8a2328D2", // From webhook
+    "txHash": "0x56aaf21e6ae6ffbae98325c8e29678800e50b",     // From webhook
+    "chainId": "8453",                                        // Payment routing chain
+    "tokenSymbol": "USDC"                                     // Payment token
+  },
+  "destination": {
+    "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6", // Final destination
+    "txHash": "050bbe74da18bc6d9a3543b54b10a8e409a8bf1396f6dac87b6cf8e7b9ede171",         // Withdrawal tx hash
+    "chainId": "10001",                                                                      // Final destination chain
+    "tokenSymbol": "USDC_XLM"                                                               // Final token
+  },
+  "metadata": {
+    "provider": "daimo",                    // Which provider processed payment
+    "preferred_chain": "8453",              // Routing chain
+    "preferred_token": "USDC",              // Routing token
+    "is_usdc_xlm_conversion": "true",       // Special conversion flow
+    "withdraw_id": "WD_1753380725494",      // Withdrawal service ID
+    "withdrawal_tx_hash": "050bbe74...",    // Withdrawal transaction hash
+    "source_address": "0x46ffEA895...",     // Source address (duplicate for convenience)
+    "source_tx_hash": "0x56aaf21e6ae..."   // Source transaction hash (duplicate)
+  }
+}
+```
+
 ## 📊 Request/Response Examples
 
 ### Complete Payment Flow
 
-1. **Create Payment**
+1. **Create Payment** (USDC_XLM Conversion Example)
 ```bash
 curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
   -H "Content-Type: application/json" \
   -d '{
     "display": {
-      "intent": "Coffee purchase",
+      "intent": "Coffee purchase with XLM delivery",
       "currency": "USD"
     },
+    "preferredChain": "8453",
+    "preferredToken": "USDC",
     "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-      "chainId": "10",
-      "amountUnits": "5500000",
-      "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+      "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+      "chainId": "10001",
+      "amountUnits": "5.50",
+      "tokenSymbol": "USDC_XLM",
+      "tokenAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     }
   }'
 ```
+
+**Flow**: User pays with any token via Daimo (Base chain) → Gets XLM on Stellar
 
 2. **Check Payment Status**
 ```bash
@@ -448,16 +606,35 @@ curl -X POST https://your-project.supabase.co/functions/v1/webhook-handler?provi
 # Health check
 curl https://your-project.supabase.co/functions/v1/api-health
 
-# Test payment creation
-curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
+# Test payment creation (Standard EVM payment)
+curl -X POST http://localhost:54321/functions/v1/payment-api \
   -H "Content-Type: application/json" \
   -d '{
-    "display": {"intent": "Test", "currency": "USD"},
+    "display": {"intent": "Test Payment", "currency": "USD"},
+    "preferredChain": "8453",
+    "preferredToken": "USDC",
     "destination": {
       "destinationAddress": "0x1234567890abcdef1234567890abcdef12345678",
-      "chainId": "1",
-      "amountUnits": "1000000",
-      "tokenAddress": "0x0000000000000000000000000000000000000000"
+      "chainId": "8453",
+      "amountUnits": "10.00",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    }
+  }'
+
+# Test USDC_XLM conversion payment
+curl -X POST http://localhost:54321/functions/v1/payment-api \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display": {"intent": "Test USDC→XLM Conversion", "currency": "USD"},
+    "preferredChain": "8453",
+    "preferredToken": "USDC",
+    "destination": {
+      "destinationAddress": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+      "chainId": "10001",
+      "amountUnits": "5.00",
+      "tokenSymbol": "USDC_XLM",
+      "tokenAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     }
   }'
 ```
@@ -472,8 +649,78 @@ supabase start
 curl http://localhost:54321/functions/v1/api-health
 curl -X POST http://localhost:54321/functions/v1/payment-api \
   -H "Content-Type: application/json" \
-  -d '{"display": {...}, "destination": {...}}'
+  -d '{"display": {...}, "preferredChain": "8453", "preferredToken": "USDC", "destination": {...}}'
+
+# Test webhook processing (simulate Daimo webhook)
+curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo&token=test_token \
+  -H "Content-Type: application/json" \
+  -d '{"type": "payment_completed", "paymentId": "test_payment_123", "payment": {"source": {"payerAddress": "0x123...", "txHash": "0xabc..."}}}'
+
+# Test getting payment with transaction details
+curl http://localhost:54321/functions/v1/payment-api/external/test_payment_123
 ```
+
+## 💸 Withdrawal Integration
+
+### Automatic Withdrawal Triggering
+
+When a payment webhook is received with `payment_completed` status, the system automatically:
+
+1. **Saves Source Transaction Details** from webhook payload
+2. **Triggers Withdrawal Integration** to external withdrawal service
+3. **Saves Withdrawal Transaction Hash** from withdrawal response
+
+### Withdrawal API Integration
+
+The system calls an external withdrawal service with this payload structure:
+
+```json
+{
+  "amount": 10.00,
+  "to_address": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+  "chain": "stellar",
+  "token": "XLM",
+  "original_payment_id": "payment_abc123",
+  "conversion_type": "usdc_base_to_xlm_stellar"
+}
+```
+
+### Withdrawal Response Processing
+
+Expected withdrawal service response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "withdrawal_uuid",
+    "withdraw_id": "WD_1753380725494_3ith7x0k6",
+    "chain": "stellar",
+    "token": "XLM",
+    "amount": 10.00,
+    "status": "PAID",
+    "to_address": "GCOOKXHCGPZJQMLNJVNCYK4JFTCM3GJAUN25W3UEFS2ZX7PL2FLWXVN6",
+    "transaction_hash": "050bbe74da18bc6d9a3543b54b10a8e409a8bf1396f6dac87b6cf8e7b9ede171"
+  }
+}
+```
+
+### Environment Configuration
+
+Required environment variables for withdrawal integration:
+
+```bash
+WITHDRAWAL_API_BASE_URL=https://withdrawal-service.example.com
+WITHDRAWAL_API_TOKEN=your_withdrawal_api_token
+WITHDRAWAL_INTEGRATION_ENABLED=true
+```
+
+### Special Conversion Handling
+
+**USDC_XLM Conversion Flow**:
+- When `destination.tokenSymbol` is `USDC_XLM`
+- Withdrawal payload includes `conversion_type: "usdc_base_to_xlm_stellar"`
+- Withdrawal service converts USDC to XLM and sends to Stellar address
 
 ## 📚 Additional Resources
 

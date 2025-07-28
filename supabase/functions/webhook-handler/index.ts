@@ -97,15 +97,32 @@ async function handleDaimoWebhook(webhookData: DaimoWebhookEvent): Promise<any> 
     // Map Daimo webhook event types to our status
     const status = mapDaimoWebhookEventToStatus(webhookData.type);
 
+    const payment = await db.getPaymentByExternalId(externalId);
+
     // Update payment status in database
     await db.updatePaymentStatus(externalId, status);
 
-    // If payment is completed, trigger withdrawal integration
-    if (status === 'payment_completed') {
-      console.log(
-        `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${externalId}`
-      );
-      await triggerWithdrawalIntegration(externalId);
+    // If payment is completed, save source transaction details and trigger withdrawal
+    if (status === 'payment_completed' && webhookData.payment) {
+      // Extract source transaction details from Daimo webhook
+      const sourceAddress = webhookData.payment.source?.payerAddress;
+      const sourceTxHash = webhookData.payment.source?.txHash;
+
+      // Save source transaction details if available
+      if (sourceAddress && sourceTxHash) {
+        console.log(
+          `[WebhookHandler] Saving source transaction details for payment: ${externalId}`
+        );
+        await db.updatePaymentSourceDetails(externalId, sourceAddress, sourceTxHash);
+      }
+
+      // Trigger withdrawal integration if not already completed
+      if (payment && payment?.status !== 'payment_completed') {
+        console.log(
+          `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${externalId}`
+        );
+        await triggerWithdrawalIntegration(externalId);
+      }
     }
 
     return {
@@ -145,20 +162,32 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
     // Update payment status
     await db.updatePaymentStatus('aqua_invoice_' + webhookData.invoice_id, status);
 
-    // Update payment with transaction hash if provided
-    if (webhookData.transaction_hash && status === 'payment_completed') {
-      // You might want to update the provider_response with transaction details
-      console.log(
-        `[WebhookHandler] Transaction completed for ${webhookData.invoice_id}: ${webhookData.transaction_hash}`
-      );
-    }
-
-    // If payment is completed, trigger withdrawal integration
+    // If payment is completed, save source transaction details and trigger withdrawal
     if (status === 'payment_completed') {
+      // Extract source transaction details from Aqua webhook
+      const sourceAddress = webhookData.from; // Payer's address
+      const sourceTxHash = webhookData.transaction_hash; // Transaction hash
+
+      // Save source transaction details if available
+      if (sourceAddress && sourceTxHash) {
+        console.log(
+          `[WebhookHandler] Saving Aqua source transaction details for invoice: ${webhookData.invoice_id}`
+        );
+        await db.updatePaymentSourceDetails(
+          'aqua_invoice_' + webhookData.invoice_id,
+          sourceAddress,
+          sourceTxHash
+        );
+      }
+
+      // Trigger withdrawal integration
       console.log(
         `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${existingPayment.id}`
       );
-      await triggerWithdrawalIntegration('aqua_invoice_' + webhookData.invoice_id);
+
+      if (existingPayment && existingPayment?.status !== 'payment_completed') {
+        await triggerWithdrawalIntegration('aqua_invoice_' + webhookData.invoice_id);
+      }
     }
 
     return {
@@ -318,12 +347,29 @@ async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
       withdrawalResult
     );
 
-    // Optionally update payment with withdrawal ID
-    if (withdrawalResult.withdraw_id) {
-      // You might want to add a method to update withdraw_id in the database
+    // Save withdrawal transaction details if available
+    if (withdrawalResult.success && withdrawalResult.data) {
+      const withdrawId = withdrawalResult.data.withdraw_id;
+      const transactionHash = withdrawalResult.data.transaction_hash;
+
+      if (transactionHash) {
+        console.log(
+          `[WebhookHandler] Saving withdrawal transaction hash for payment ${paymentId}: ${transactionHash}`
+        );
+        await db.updatePaymentWithdrawalTxHash(paymentId, transactionHash, withdrawId);
+      } else if (withdrawId) {
+        // Save withdrawal ID even if transaction hash is not available yet
+        console.log(
+          `[WebhookHandler] Saving withdrawal ID for payment ${paymentId}: ${withdrawId}`
+        );
+        await db.updatePaymentWithWithdrawId(paymentId, withdrawId);
+      }
+    } else if (withdrawalResult.withdraw_id) {
+      // Fallback for older response format
       console.log(
         `[WebhookHandler] Withdrawal ID ${withdrawalResult.withdraw_id} created for payment ${paymentId}`
       );
+      await db.updatePaymentWithWithdrawId(paymentId, withdrawalResult.withdraw_id);
     }
   } catch (error) {
     console.error(

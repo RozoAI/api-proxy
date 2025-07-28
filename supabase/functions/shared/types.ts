@@ -76,6 +76,11 @@ export interface PaymentRecord {
   provider_response?: any;
   metadata?: any;
   original_request: any;
+  // Source transaction details (from payment provider)
+  source_address?: string;
+  source_tx_hash?: string;
+  // Withdrawal transaction details
+  withdrawal_tx_hash?: string;
 }
 
 // Webhook types
@@ -91,12 +96,13 @@ export interface AquaWebhookEvent {
   invoice_id: string;
   status: 'failed' | 'paid' | 'created' | 'retry' | 'deleted';
   status_updated_at_t: number;
+  created_at_t: number;
   transaction_hash?: string;
   amount: number;
   address: string;
+  from: string; // Payer's address (source address)
   token_id: string;
   mode: 'default' | 'web3';
-  created_at: string;
   callback_url: string;
   metadata?: Record<string, any>;
   cover_percent?: number;
