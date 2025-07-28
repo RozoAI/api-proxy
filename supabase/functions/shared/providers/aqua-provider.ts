@@ -193,19 +193,12 @@ export class AquaProvider extends BaseProvider {
       },
       source: null, // Aqua doesn't provide source information initially
       destination: {
-        destinationAddress:
-          originalRequest?.destination.destinationAddress ||
-          aquaResponse.metadata?.withdrawal_destination?.address ||
-          aquaResponse.address ||
-          '',
+        destinationAddress: this.getMappedAddressForToken(originalRequest?.preferredToken || 'XLM'),
         txHash: aquaResponse.transaction_hash || null,
-        chainId: originalRequest?.destination.chainId || '10001', // Default to Stellar
+        chainId: originalRequest?.preferredChain || '10001', // Default to Stellar
         amountUnits:
           originalRequest?.destination.amountUnits || aquaResponse.amount?.toString() || '',
-        tokenSymbol:
-          originalRequest?.destination.tokenSymbol ||
-          originalRequest?.preferredToken ||
-          this.mapAquaTokenToSymbol(aquaResponse.token_id),
+        tokenSymbol: this.mapAquaTokenToSymbol(originalRequest?.preferredToken || 'XLM'),
         tokenAddress: '', // Stellar doesn't use token addresses
       },
       externalId: aquaResponse.metadata?.daimo_external_id || aquaResponse.invoice_id || null,
@@ -217,10 +210,7 @@ export class AquaProvider extends BaseProvider {
         aqua_token_id: aquaResponse.token_id,
         aqua_status: aquaResponse.status,
         aqua_status_updated_at: aquaResponse.status_updated_at_t,
-        preferred_chain: originalRequest?.preferredChain,
-        preferred_token: originalRequest?.preferredToken,
         provider: 'aqua',
-        mapped_address: this.getMappedAddressForToken(originalRequest?.preferredToken || 'XLM'),
       },
       url: `${this.config.baseUrl}/checkout?id=${aquaResponse.invoice_id}`,
     };
