@@ -161,6 +161,67 @@ export class PaymentDatabase {
     return true;
   }
 
+  async updatePaymentSourceDetails(
+    paymentId: string,
+    sourceAddress: string,
+    sourceTxHash: string
+  ): Promise<boolean> {
+    const { error } = await this.supabase
+      .from('payments')
+      .update({
+        source_address: sourceAddress,
+        source_tx_hash: sourceTxHash,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('external_id', paymentId);
+
+    if (error) {
+      console.error('[Database] Error updating payment source details:', error);
+      return false;
+    }
+
+    console.log('[Database] Payment updated with source details:', {
+      external_id: paymentId,
+      source_address: sourceAddress,
+      source_tx_hash: sourceTxHash,
+    });
+
+    return true;
+  }
+
+  async updatePaymentWithdrawalTxHash(
+    paymentId: string,
+    withdrawalTxHash: string,
+    withdrawId?: string
+  ): Promise<boolean> {
+    const updateData: any = {
+      withdrawal_tx_hash: withdrawalTxHash,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (withdrawId) {
+      updateData.withdraw_id = withdrawId;
+    }
+
+    const { error } = await this.supabase
+      .from('payments')
+      .update(updateData)
+      .eq('external_id', paymentId);
+
+    if (error) {
+      console.error('[Database] Error updating payment withdrawal transaction hash:', error);
+      return false;
+    }
+
+    console.log('[Database] Payment updated with withdrawal transaction hash:', {
+      external_id: paymentId,
+      withdrawal_tx_hash: withdrawalTxHash,
+      withdraw_id: withdrawId,
+    });
+
+    return true;
+  }
+
   async getPaymentsByStatus(status: string, olderThanMinutes?: number): Promise<PaymentRecord[]> {
     let query = this.supabase.from('payments').select('*').eq('status', status);
 
@@ -192,11 +253,21 @@ export class PaymentDatabase {
         intent: 'Payment',
         currency: record.currency,
       },
-      source: null,
+      source:
+        record.source_address && record.source_tx_hash
+          ? {
+              payerAddress: record.source_address,
+              txHash: record.source_tx_hash,
+              chainId: record.chain_id,
+              amountUnits: originalRequest?.destination?.amountUnits || record.amount.toString(),
+              tokenSymbol: record.metadata?.preferred_token || '',
+              tokenAddress: originalRequest?.destination?.tokenAddress || '',
+            }
+          : null,
       destination: {
         destinationAddress:
           withdrawalDestination?.address || originalRequest?.destination?.destinationAddress || '',
-        txHash: null,
+        txHash: record.withdrawal_tx_hash || null,
         chainId:
           withdrawalDestination?.chainId ||
           originalRequest?.destination?.chainId ||
@@ -217,6 +288,10 @@ export class PaymentDatabase {
         preferred_chain: record.metadata?.preferred_chain || record.chain_id,
         preferred_token: record.metadata?.preferred_token,
         withdrawal_destination: withdrawalDestination,
+        withdraw_id: record.withdraw_id,
+        withdrawal_tx_hash: record.withdrawal_tx_hash,
+        source_address: record.source_address,
+        source_tx_hash: record.source_tx_hash,
       },
     };
   }

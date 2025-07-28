@@ -12,44 +12,44 @@ DROP INDEX IF EXISTS idx_payments_status_updated;
 
 -- Create optimized composite indexes for common query patterns
 -- Index for status-based queries (most common)
-CREATE INDEX CONCURRENTLY idx_payments_status_created_at 
+CREATE INDEX idx_payments_status_created_at 
 ON public.payments(status, created_at DESC);
 
 -- Index for external_id lookups (unique constraint)
-CREATE UNIQUE INDEX CONCURRENTLY idx_payments_external_id_unique 
+CREATE UNIQUE INDEX idx_payments_external_id_unique 
 ON public.payments(external_id) 
 WHERE external_id IS NOT NULL;
 
 -- Index for status + status_updated_at queries (for stale payment detection)
-CREATE INDEX CONCURRENTLY idx_payments_status_status_updated 
+CREATE INDEX idx_payments_status_status_updated 
 ON public.payments(status, status_updated_at);
 
 -- Index for provider + status queries
-CREATE INDEX CONCURRENTLY idx_payments_provider_status 
+CREATE INDEX idx_payments_provider_status 
 ON public.payments(provider_name, status);
 
 -- Index for chain_id + status queries
-CREATE INDEX CONCURRENTLY idx_payments_chain_status 
+CREATE INDEX idx_payments_chain_status 
 ON public.payments(chain_id, status);
 
 -- Index for date range queries on created_at
-CREATE INDEX CONCURRENTLY idx_payments_created_at_desc 
+CREATE INDEX idx_payments_created_at_desc 
 ON public.payments(created_at DESC);
 
 -- Index for date range queries on status_updated_at
-CREATE INDEX CONCURRENTLY idx_payments_status_updated_at_desc 
+CREATE INDEX idx_payments_status_updated_at_desc 
 ON public.payments(status_updated_at DESC);
 
 -- Partial indexes for specific status values (for very frequent queries)
-CREATE INDEX CONCURRENTLY idx_payments_status_unpaid 
+CREATE INDEX idx_payments_status_unpaid 
 ON public.payments(created_at DESC) 
 WHERE status = 'payment_unpaid';
 
-CREATE INDEX CONCURRENTLY idx_payments_status_started 
+CREATE INDEX idx_payments_status_started 
 ON public.payments(created_at DESC) 
 WHERE status = 'payment_started';
 
-CREATE INDEX CONCURRENTLY idx_payments_status_completed 
+CREATE INDEX idx_payments_status_completed 
 ON public.payments(created_at DESC) 
 WHERE status = 'payment_completed';
 
