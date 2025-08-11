@@ -84,6 +84,7 @@ This document provides detailed API specifications for all Supabase Edge Functio
 - **When**: `preferredChain: "8453"` (Base chain payments via Daimo)
 - **Process**: After Daimo payment creation → Fetch deposit address from Rozo API → Set as destination address
 - **Result**: User gets deposit address in destination field and expiration time for Base chain payments
+- **URL Transformation**: Daimo URLs are automatically transformed to use `https://intentapi.rozo.ai` domain
 
 **Response**:
 ```json
@@ -114,7 +115,7 @@ This document provides detailed API specifications for all Supabase Edge Functio
     "is_usdc_xlm_conversion": "true",
     "deposit_expiration": 1753710606
   },
-  "url": "https://checkout.daimo.com/payment_abc123",
+  "url": "https://intentapi.rozo.ai/payment_abc123",
   "depositExpiration": 1753710606
 }
 ```
@@ -390,7 +391,7 @@ This document provides detailed API specifications for all Supabase Edge Functio
       "status": "healthy",
       "responseTime": 150,
       "lastCheck": "2024-01-01T00:00:00.000Z",
-      "baseUrl": "https://pay.daimo.com",
+      "baseUrl": "https://intentapi.rozo.ai",
       "enabled": true
     },
     "aqua": {

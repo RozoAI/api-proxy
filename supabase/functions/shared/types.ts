@@ -8,6 +8,7 @@ export interface PaymentRequest {
   };
   preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
   preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")
+  preferredTokenAddress?: string; // Optional: explicit token address for preferred token on preferredChain
   destination: PaymentDestination; // For withdrawal after payment completion
   metadata?: Record<string, any>;
 }
@@ -110,6 +111,30 @@ export interface AquaWebhookEvent {
   cover_percent?: number;
   cover_amount?: number;
   cover_operator?: 'both' | 'one';
+}
+
+export interface PaymentManagerWebhookEvent {
+  event: 'UPDATE';
+  timestamp: string;
+  payment: {
+    id: string;
+    status: PaymentStatus;
+    externalId: string;
+    createdAt: string;
+    updatedAt: string;
+    completedAt?: string;
+    display: {
+      intent: string;
+      paymentValue: string;
+      currency: string;
+    };
+    source?: PaymentSource;
+    destination: PaymentResponseDestination;
+    metadata?: Record<string, any>;
+    payerAddress?: string; // Included when payment completed
+    transactionHash?: string; // Included when payment completed
+  };
+  previousStatus?: PaymentStatus;
 }
 
 // Withdrawal API types

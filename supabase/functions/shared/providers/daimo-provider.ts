@@ -1,6 +1,5 @@
 // Daimo Provider for Edge Functions
 // Acts as a pure proxy - passes requests through to Daimo using their actual API format
-import { BaseProvider } from './base-provider.ts';
 import type {
   PaymentRequest,
   PaymentResponse,
@@ -8,6 +7,7 @@ import type {
   ProviderConfig,
   ProviderHealth,
 } from '../types.ts';
+import { BaseProvider } from './base-provider.ts';
 
 export class DaimoProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
@@ -140,12 +140,8 @@ export class DaimoProvider extends BaseProvider {
     // Check if destination token is USDC_XLM - if so, use USDC Base address from env
     const isUSDCXLMDestination = paymentData.destination.tokenSymbol === 'USDC_XLM';
 
-    console.log('[DEBUG] [daimo] USDC_XLM conversion check:', {
-      preferredToken: paymentData.preferredToken,
-      destinationTokenSymbol: paymentData.destination.tokenSymbol,
-      isUSDCXLMDestination: isUSDCXLMDestination,
-      originalAddress: paymentData.destination.destinationAddress,
-    });
+    // Determine destination token address: prefer explicit destination.tokenAddress
+    const destinationTokenAddress = paymentData.destination.tokenAddress || undefined;
 
     const finalDestination = isUSDCXLMDestination
       ? {
@@ -158,23 +154,24 @@ export class DaimoProvider extends BaseProvider {
       : {
           destinationAddress: paymentData.destination.destinationAddress,
           chainId: parseInt(paymentData.destination.chainId),
-          tokenAddress: paymentData.destination.tokenAddress,
+          tokenAddress: destinationTokenAddress,
           amountUnits: paymentData.destination.amountUnits,
         };
 
-    console.log('[DEBUG] [daimo] Final destination:', finalDestination);
+    // Determine pay-in preferred token address: prefer preferredTokenAddress if provided
+    const payinTokenAddress = paymentData.preferredTokenAddress || finalDestination.tokenAddress;
 
     return {
       display: {
         intent: paymentData.display.intent,
         // Map our preferredChain to Daimo's preferredChains array
         preferredChains: [parseInt(paymentData.preferredChain)],
-        // For XLM, use USDC Base token; otherwise use original
-        ...(finalDestination.tokenAddress && {
+        // If an explicit token address is provided, add preferredTokens mapping
+        ...(payinTokenAddress && {
           preferredTokens: [
             {
               chain: parseInt(paymentData.preferredChain),
-              address: finalDestination.tokenAddress,
+              address: payinTokenAddress,
             },
           ],
         }),

@@ -1,15 +1,18 @@
 // Payment Router for Edge Functions
 // Migrated from original Express.js architecture with sophisticated provider management
-import { DaimoProvider } from './providers/daimo-provider.ts';
 import { AquaProvider } from './providers/aqua-provider.ts';
-import type { PaymentRequest, PaymentResponse, ProviderConfig, ChainConfig } from './types.ts';
+import { DaimoProvider } from './providers/daimo-provider.ts';
+import { PaymentManagerProvider } from './providers/payment-manager-provider.ts';
+import type { ChainConfig, PaymentRequest, PaymentResponse, ProviderConfig } from './types.ts';
+
+export const SOLANA_CHAIN_ID = '10002';
+export const POLYGON_CHAIN_ID = '137';
 
 // Complete chain configurations matching original architecture
 const CHAIN_CONFIGS: ChainConfig[] = [
   // Daimo Provider Chains (Ethereum Ecosystem)
   { chainId: 1, name: 'Ethereum Mainnet', provider: 'daimo', enabled: true },
   { chainId: 10, name: 'Optimism', provider: 'daimo', enabled: true },
-  { chainId: 137, name: 'Polygon', provider: 'daimo', enabled: true },
   { chainId: 42161, name: 'Arbitrum One', provider: 'daimo', enabled: true },
   { chainId: 8453, name: 'Base', provider: 'daimo', enabled: true },
   { chainId: 56, name: 'BSC', provider: 'daimo', enabled: true },
@@ -25,7 +28,24 @@ const CHAIN_CONFIGS: ChainConfig[] = [
   { chainId: 324, name: 'zkSync', provider: 'daimo', enabled: true },
 
   // Aqua Provider Chains (Stellar Ecosystem)
-  { chainId: 10001, name: 'Stellar', provider: 'aqua', enabled: true, tokens: ['XLM', 'USDC_XLM'] },
+  {
+    chainId: 10001,
+    name: 'Stellar',
+    provider: 'aqua',
+    enabled: true,
+    tokens: ['XLM', 'USDC_XLM'],
+  },
+
+  // Payment Manager Provider Chains (Solana Ecosystem)
+  {
+    chainId: parseInt(SOLANA_CHAIN_ID),
+    name: 'Solana',
+    provider: 'payment-manager',
+    enabled: true,
+    tokens: ['USDC'],
+  },
+
+  { chainId: 137, name: 'Polygon', provider: 'payment-manager', enabled: true },
 ];
 
 // Provider configurations
@@ -44,10 +64,17 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     timeout: 30000,
     enabled: true,
   },
+  'payment-manager': {
+    name: 'payment-manager',
+    baseUrl: Deno.env.get('PAYMENT_MANAGER_BASE_URL') || 'https://rozo-payment-manager.example.com',
+    apiKey: Deno.env.get('PAYMENT_MANAGER_API_KEY'),
+    timeout: 30000,
+    enabled: true,
+  },
 };
 
 export class PaymentRouter {
-  private providers: Map<string, DaimoProvider | AquaProvider>;
+  private providers: Map<string, DaimoProvider | AquaProvider | PaymentManagerProvider>;
 
   constructor() {
     this.providers = new Map();
@@ -63,6 +90,14 @@ export class PaymentRouter {
     // Initialize Aqua provider
     if (PROVIDER_CONFIGS.aqua.enabled) {
       this.providers.set('aqua', new AquaProvider(PROVIDER_CONFIGS.aqua));
+    }
+
+    // Initialize Payment Manager provider
+    if (PROVIDER_CONFIGS['payment-manager'].enabled) {
+      this.providers.set(
+        'payment-manager',
+        new PaymentManagerProvider(PROVIDER_CONFIGS['payment-manager'])
+      );
     }
 
     console.log(
@@ -103,86 +138,96 @@ export class PaymentRouter {
       throw new Error(`Provider ${providerName} not available for chain ${chainId}`);
     }
 
-    console.log(`[PaymentRouter] Getting payment from ${providerName} for payment ${paymentId}`);
-
     try {
       return await provider.getPayment(paymentId);
     } catch (error) {
-      console.error(`[PaymentRouter] Error getting payment from ${providerName}:`, error);
+      console.error(`[PaymentRouter] Error getting payment with ${providerName}:`, error);
       throw error;
     }
   }
 
   getProviderForChain(chainId: string): string {
-    const chainIdNum = parseInt(chainId);
-    const config = CHAIN_CONFIGS.find((c) => c.chainId === chainIdNum && c.enabled);
+    const chainConfig = CHAIN_CONFIGS.find(
+      (chain) => chain.chainId.toString() === chainId.toString()
+    );
 
-    if (!config) {
-      console.warn(`[PaymentRouter] No config found for chain ${chainId}, using default provider`);
-      return 'daimo'; // Default provider
+    if (!chainConfig) {
+      throw new Error(`Unsupported chain ID: ${chainId}`);
     }
 
-    const provider = this.providers.get(config.provider);
-    if (!provider || !provider.isEnabled()) {
-      console.warn(`[PaymentRouter] Provider ${config.provider} not available, using default`);
-      return 'daimo'; // Fallback to default
+    if (!chainConfig.enabled) {
+      throw new Error(`Chain ${chainId} is disabled`);
     }
 
-    return config.provider;
+    return chainConfig.provider;
   }
 
   private validatePaymentRequest(paymentData: PaymentRequest, providerName: string): void {
-    const { destination, preferredChain, preferredToken } = paymentData;
-
-    // Validate required fields
-    if (!destination.destinationAddress) {
-      throw new Error('Destination address is required for withdrawal');
+    // Common validations
+    if (!paymentData.display?.intent) {
+      throw new Error('Payment intent is required');
     }
 
-    if (!destination.amountUnits || parseFloat(destination.amountUnits) <= 0) {
-      throw new Error('Valid withdrawal amount is required');
+    if (
+      !paymentData.destination?.amountUnits ||
+      parseFloat(paymentData.destination.amountUnits) <= 0
+    ) {
+      throw new Error('Valid amount is required');
     }
 
-    if (!preferredChain) {
-      throw new Error('Preferred chain is required for payment routing');
+    // Provider-specific validations
+    switch (providerName) {
+      case 'daimo':
+        this.validateDaimoRequest(paymentData);
+        break;
+      case 'aqua':
+        this.validateAquaRequest(paymentData);
+        break;
+      case 'payment-manager':
+        this.validatePaymentManagerRequest(paymentData);
+        break;
+      default:
+        throw new Error(`Unknown provider: ${providerName}`);
     }
+  }
 
-    if (!preferredToken) {
-      throw new Error('Preferred token is required for payment processing');
-    }
+  private validateDaimoRequest(paymentData: PaymentRequest): void {
+    // Daimo supports all EVM chains and tokens
+    const supportedChains = [
+      1, 10, 137, 42161, 8453, 56, 43114, 250, 314, 42220, 100, 1101, 59144, 5000, 534352, 324,
+    ];
+    const chainId = parseInt(paymentData.preferredChain);
 
-    // Provider-specific validation
-    if (providerName === 'aqua') {
-      this.validateAquaRequest(paymentData);
+    if (!supportedChains.includes(chainId)) {
+      throw new Error(`Daimo does not support chain ID: ${chainId}`);
     }
   }
 
   private validateAquaRequest(paymentData: PaymentRequest): void {
-    const { destination, preferredToken } = paymentData;
-    const provider = this.providers.get('aqua') as AquaProvider;
-
-    // Validate withdrawal amount (destination)
-    if (!provider.isValidStellarAmount(destination.amountUnits)) {
-      throw new Error('Invalid withdrawal amount format for Stellar (max 7 decimal places)');
+    // Aqua only supports Stellar (10001)
+    if (paymentData.preferredChain !== '10001') {
+      throw new Error('Aqua only supports Stellar (chain ID: 10001)');
     }
 
-    // Validate preferred token for payment processing
-    const supportedTokens = ['XLM', 'USDC_XLM', 'USDC'];
-    if (!supportedTokens.includes(preferredToken)) {
-      throw new Error(
-        `Unsupported preferred token: ${preferredToken}. Supported: ${supportedTokens.join(', ')}`
-      );
-    }
-
-    // Validate withdrawal token symbol if provided
-    if (destination.tokenSymbol && !supportedTokens.includes(destination.tokenSymbol)) {
-      throw new Error(
-        `Unsupported withdrawal token: ${destination.tokenSymbol}. Supported: ${supportedTokens.join(', ')}`
-      );
+    // Validate token
+    const supportedTokens = ['XLM', 'USDC_XLM'];
+    if (!supportedTokens.includes(paymentData.preferredToken)) {
+      throw new Error(`Aqua does not support token: ${paymentData.preferredToken}`);
     }
   }
 
-  // Health check for all providers
+  private validatePaymentManagerRequest(paymentData: PaymentRequest): void {
+    // Payment Manager only supports Solana (SOLANA_CHAIN_ID)
+    if (
+      !(
+        paymentData.preferredChain == SOLANA_CHAIN_ID ||
+        paymentData.preferredChain == POLYGON_CHAIN_ID
+      )
+    ) {
+      throw new Error('Payment Manager only supports Solana and Polygon');
+    }
+  }
+
   async checkProvidersHealth(): Promise<Record<string, any>> {
     const healthResults: Record<string, any> = {};
 
@@ -201,32 +246,11 @@ export class PaymentRouter {
     return healthResults;
   }
 
-  // Get supported chains
   getSupportedChains(): ChainConfig[] {
-    return CHAIN_CONFIGS.filter((chain) => {
-      const provider = this.providers.get(chain.provider);
-      return chain.enabled && provider && provider.isEnabled();
-    });
+    return CHAIN_CONFIGS.filter((chain) => chain.enabled);
   }
 
-  // Get provider configurations (for status endpoint)
   getProviderConfigs(): Record<string, any> {
-    const configs: Record<string, any> = {};
-
-    for (const [name, provider] of this.providers) {
-      const supportedChains = CHAIN_CONFIGS.filter((c) => c.provider === name && c.enabled).map(
-        (c) => c.chainId
-      );
-
-      configs[name] = {
-        name: provider.getName(),
-        baseUrl: provider.getBaseUrl(),
-        enabled: provider.isEnabled(),
-        timeout: provider.getTimeout(),
-        supportedChains,
-      };
-    }
-
-    return configs;
+    return PROVIDER_CONFIGS;
   }
 }

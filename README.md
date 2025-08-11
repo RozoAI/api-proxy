@@ -1,10 +1,12 @@
 # Payment API Proxy - Supabase Edge Functions
 
-A multi-provider payment gateway built with Supabase Edge Functions, supporting Daimo Pay and Aqua payment providers with automatic withdrawal integration.
+A multi-provider payment gateway built with Supabase Edge Functions, supporting
+Daimo Pay and Aqua payment providers with automatic withdrawal integration.
 
 ## 🏗️ Architecture Overview
 
-This service is deployed as Supabase Edge Functions with the following structure:
+This service is deployed as Supabase Edge Functions with the following
+structure:
 
 ```
 supabase/
@@ -19,11 +21,11 @@ supabase/
 
 ### 🚀 Edge Functions
 
-| Function | Endpoint | Description |
-|----------|----------|-------------|
-| `payment-api` | `/functions/v1/payment-api` | Create payments, get payment status |
+| Function          | Endpoint                        | Description                                      |
+| ----------------- | ------------------------------- | ------------------------------------------------ |
+| `payment-api`     | `/functions/v1/payment-api`     | Create payments, get payment status              |
 | `webhook-handler` | `/functions/v1/webhook-handler` | Process Daimo/Aqua webhooks, trigger withdrawals |
-| `api-health` | `/functions/v1/api-health` | System health, provider status |
+| `api-health`      | `/functions/v1/api-health`      | System health, provider status                   |
 
 ### 🗄️ Database Schema
 
@@ -36,7 +38,7 @@ supabase/
 ## 📋 Prerequisites
 
 1. **Supabase CLI** installed
-2. **Deno** runtime installed  
+2. **Deno** runtime installed
 3. **Supabase Project** created
 4. **API Keys** for Daimo and Aqua providers
 
@@ -101,6 +103,12 @@ supabase secrets set DAIMO_WEBHOOK_TOKEN="your-daimo-webhook-token"
 supabase secrets set AQUA_BASE_URL="https://api.aqua.network"
 supabase secrets set AQUA_API_TOKEN="your-aqua-api-token"
 supabase secrets set AQUA_WEBHOOK_TOKEN="your-aqua-webhook-token"
+
+# Payment Manager Provider
+supabase secrets set PAYMENT_MANAGER_BASE_URL="https://rozo-payment-manager.example.com"
+supabase secrets set PAYMENT_MANAGER_API_KEY="your-payment-manager-api-key"
+supabase secrets set PAYMENT_MANAGER_SOLANA_ADDRESS="your-solana-destination-address"
+supabase secrets set PAYMENT_MANAGER_WEBHOOK_TOKEN="your-payment-manager-webhook-token"
 
 # Withdrawal Integration
 supabase secrets set WITHDRAWAL_API_BASE_URL="https://proj-ref.supabase.co"
@@ -203,6 +211,7 @@ supabase dashboard db
 ### Payment API
 
 #### Create Payment
+
 ```bash
 POST /functions/v1/payment-api
 Content-Type: application/json
@@ -212,10 +221,13 @@ Content-Type: application/json
     "intent": "Coffee purchase",
     "currency": "USD"
   },
+  "preferredChain": "8453",
+  "preferredToken": "USDC",
   "destination": {
     "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    "chainId": "10",
+    "chainId": "10001",
     "amountUnits": "5500000",
+    "tokenSymbol": "USDC_XLM",
     "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
   },
   "metadata": {
@@ -224,12 +236,43 @@ Content-Type: application/json
 }
 ```
 
+#### Payment Manager Example (Solana USDC)
+
+```bash
+POST /functions/v1/payment-api
+Content-Type: application/json
+
+{
+  "display": {
+    "intent": "Premium Subscription Payment",
+    "currency": "USD"
+  },
+  "preferredChain": "10002",
+  "preferredToken": "USDC",
+  "destination": {
+    "destinationAddress": "0x742d35cc6ab4925a59b2a6923e87e11d2a1e3b1f",
+    "chainId": "11155111",
+    "amountUnits": "25000000",
+    "tokenSymbol": "USDC"
+  },
+  "metadata": {
+    "orderId": "subscription_2024_001",
+    "userId": "user_12345",
+    "planType": "premium",
+    "billingCycle": "monthly",
+    "email": "user@example.com"
+  }
+}
+```
+
 #### Get Payment by ID
+
 ```bash
 GET /functions/v1/payment-api/{paymentId}
 ```
 
 #### Get Payment by External ID
+
 ```bash
 GET /functions/v1/payment-api/external-id/{externalId}
 ```
@@ -237,6 +280,7 @@ GET /functions/v1/payment-api/external-id/{externalId}
 ### Webhook Handler
 
 #### Daimo Webhook
+
 ```bash
 POST /functions/v1/webhook-handler?provider=daimo&token=your-webhook-token
 Content-Type: application/json
@@ -251,7 +295,8 @@ X-Daimo-Signature: sha256=...
 }
 ```
 
-#### Aqua Webhook  
+#### Aqua Webhook
+
 ```bash
 POST /functions/v1/webhook-handler?provider=aqua&token=your-webhook-token
 Content-Type: application/json
@@ -266,7 +311,35 @@ Content-Type: application/json
 }
 ```
 
+#### Payment Manager Webhook
+
+```bash
+POST /functions/v1/webhook-handler?provider=payment-manager&token=your-webhook-token
+Content-Type: application/json
+
+{
+  "event": "UPDATE",
+  "timestamp": "2024-01-15T10:35:00Z",
+  "payment": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "payment_completed",
+    "externalId": "order-123",
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T10:35:00Z",
+    "completedAt": "2024-01-15T10:35:00Z",
+    "display": { ... },
+    "source": { ... },
+    "destination": { ... },
+    "metadata": { ... },
+    "payerAddress": "0x1234...5678",
+    "transactionHash": "0xabc...def"
+  },
+  "previousStatus": "payment_started"
+}
+```
+
 ### Health Check
+
 ```bash
 GET /functions/v1/api-health
 
@@ -299,6 +372,7 @@ GET /functions/v1/api-health
 ### Tables
 
 #### payments
+
 ```sql
 CREATE TABLE payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -319,6 +393,7 @@ CREATE TABLE payments (
 ```
 
 #### Payment Status Enum
+
 ```sql
 CREATE TYPE payment_status AS ENUM (
   'payment_unpaid',
@@ -360,6 +435,7 @@ CREATE INDEX idx_payments_status_completed ON payments(created_at DESC) WHERE st
 ## 🔄 Automatic Withdrawal Integration
 
 ### Flow
+
 ```
 USDC Stellar Payment Completed (Webhook)
     ↓
@@ -373,12 +449,14 @@ Log Success/Failure
 ```
 
 ### Supported Conversions
+
 - **USDC Stellar → USDC Base** ✅
 - **Future**: USDC Stellar → USDC Solana
 
 ## 📊 Monitoring & Observability
 
 ### Logs
+
 ```bash
 # View function logs
 supabase functions logs payment-api
@@ -390,6 +468,7 @@ supabase functions logs --follow
 ```
 
 ### Metrics
+
 - Function invocation count
 - Error rates
 - Response times
@@ -397,25 +476,29 @@ supabase functions logs --follow
 - Provider health status
 
 ### Alerts
+
 - Payment processing failures
-- Webhook delivery failures  
+- Webhook delivery failures
 - Provider API downtime
 - Withdrawal integration errors
 
 ## 🔒 Security Features
 
 ### Authentication & Authorization
+
 - **API Key Authentication**: For payment creation
 - **Webhook Verification**: Signature validation (Daimo) + Token auth (Aqua)
 - **Row Level Security**: Database-level access control
 - **CORS**: Configurable allowed origins
 
 ### Rate Limiting
+
 - **Built-in**: Supabase Edge Functions rate limiting
 - **Custom**: Additional rate limiting for webhook endpoints
 - **DDoS Protection**: Supabase infrastructure-level protection
 
 ### Data Integrity
+
 - **CHECK constraints**: Amount must be positive
 - **Unique constraints**: External IDs are unique
 - **Input validation**: Application-level validation
@@ -424,6 +507,7 @@ supabase functions logs --follow
 ## 🚀 Production Checklist
 
 ### Pre-Deployment
+
 - [ ] Environment secrets configured
 - [ ] Database migrations applied
 - [ ] Database improvements applied (`./apply-db-improvements.sh`)
@@ -431,7 +515,8 @@ supabase functions logs --follow
 - [ ] CORS origins configured
 - [ ] API keys obtained from providers
 
-### Post-Deployment  
+### Post-Deployment
+
 - [ ] Health check passing
 - [ ] Test payment flow end-to-end
 - [ ] Webhook endpoints responding
@@ -440,8 +525,9 @@ supabase functions logs --follow
 - [ ] Log aggregation setup
 
 ### Ongoing Maintenance
+
 - [ ] Monitor function performance
-- [ ] Review error logs regularly  
+- [ ] Review error logs regularly
 - [ ] Update provider API configurations
 - [ ] Scale function resources as needed
 - [ ] Regular database maintenance
@@ -452,6 +538,7 @@ supabase functions logs --follow
 ### Common Issues
 
 #### Function Deployment Fails
+
 ```bash
 # Check function syntax
 deno check supabase/functions/payment-api/index.ts
@@ -461,6 +548,7 @@ supabase functions logs payment-api --level error
 ```
 
 #### Database Connection Issues
+
 ```bash
 # Check database status
 supabase db status
@@ -470,6 +558,7 @@ supabase db reset --linked
 ```
 
 #### Provider API Errors
+
 ```bash
 # Test provider connectivity
 curl -H "Authorization: Bearer $DAIMO_API_KEY" https://pay.daimo.com/health
@@ -479,6 +568,7 @@ supabase secrets list
 ```
 
 #### Webhook Processing Failures
+
 ```bash
 # View webhook logs
 supabase functions logs webhook-handler
@@ -492,7 +582,7 @@ curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo 
 ## 📚 Additional Resources
 
 - [Supabase Edge Functions Documentation](https://supabase.com/docs/guides/functions)
-- [Deno Runtime Documentation](https://deno.land/manual)  
+- [Deno Runtime Documentation](https://deno.land/manual)
 - [Daimo Pay API Documentation](https://paydocs.daimo.com/)
 - [Aqua Payment Documentation](./aqua.md)
 - [API Interface Documentation](./docs/)
@@ -507,6 +597,7 @@ curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo 
 6. Open Pull Request
 
 ### Development Guidelines
+
 - Use TypeScript for all new code
 - Follow existing code patterns
 - Add tests for new functionality
@@ -515,7 +606,8 @@ curl -X POST http://localhost:54321/functions/v1/webhook-handler?provider=daimo 
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
+for details.
 
 ---
 
@@ -530,4 +622,18 @@ supabase db push && supabase functions deploy
 curl https://<your-ref>.supabase.co/functions/v1/api-health
 ```
 
-You're now ready to process payments through multiple blockchain networks with automatic withdrawal integration! 🎉
+You're now ready to process payments through multiple blockchain networks with
+automatic withdrawal integration! 🎉
+
+**Payment Routing (preferredChain)**:
+
+| Chain    | ID      | Provider        | Supported Tokens        | Use Case           |
+| -------- | ------- | --------------- | ----------------------- | ------------------ |
+| Ethereum | `1`     | Daimo           | ETH, USDC, USDT, etc.   | EVM payments       |
+| Optimism | `10`    | Daimo           | ETH, USDC, USDT, etc.   | L2 payments        |
+| Polygon  | `137`   | Daimo           | MATIC, USDC, USDT, etc. | Low-cost payments  |
+| Arbitrum | `42161` | Daimo           | ETH, USDC, USDT, etc.   | L2 payments        |
+| Base     | `8453`  | Daimo           | ETH, USDC, USDT, etc.   | Coinbase ecosystem |
+| BSC      | `56`    | Daimo           | BNB, USDC, USDT, etc.   | BSC ecosystem      |
+| Stellar  | `10001` | Aqua            | XLM, USDC_XLM           | Stellar ecosystem  |
+| Solana   | `10002` | Payment Manager | USDC                    | Solana ecosystem   |
