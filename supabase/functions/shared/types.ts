@@ -9,6 +9,7 @@ export interface PaymentRequest {
   preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
   preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")
   preferredTokenAddress?: string; // Optional: explicit token address for preferred token on preferredChain
+  receivingAddress?: string; // Optional: explicit receiving address for provider (e.g., Payment Manager)
   destination: PaymentDestination; // For withdrawal after payment completion
   metadata?: Record<string, any>;
 }

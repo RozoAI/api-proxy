@@ -120,6 +120,11 @@ export class PaymentManagerProvider extends BaseProvider {
       },
     };
 
+    // Optional top-level receivingAddress
+    if (paymentData.receivingAddress) {
+      request.receivingAddress = paymentData.receivingAddress;
+    }
+
     // Include payintokenaddress from preferredTokenAddress if provided, else fallback to destination token address
     const payinToken = paymentData.preferredTokenAddress || paymentData.destination.tokenAddress;
     if (payinToken) {
