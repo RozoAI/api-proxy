@@ -115,27 +115,29 @@ export interface AquaWebhookEvent {
 }
 
 export interface PaymentManagerWebhookEvent {
-  event: 'UPDATE';
-  timestamp: string;
+  id: string;
+  url: string;
   payment: {
     id: string;
     status: PaymentStatus;
-    externalId: string;
     createdAt: string;
-    updatedAt: string;
-    completedAt?: string;
+    receivingAddress: string;
+    memo: string;
     display: {
-      intent: string;
-      paymentValue: string;
-      currency: string;
+      name: string;
+      description: string;
+      logoUrl: string;
     };
-    source?: PaymentSource;
-    destination: PaymentResponseDestination;
-    metadata?: Record<string, any>;
-    payerAddress?: string; // Included when payment completed
-    transactionHash?: string; // Included when payment completed
+    source: any | null;
+    payinchainid: string;
+    payintokenaddress: string;
+    destination: {
+      destinationAddress: string;
+      amountUnits: string;
+    };
+    externalId: string | null;
+    metadata: any | null;
   };
-  previousStatus?: PaymentStatus;
 }
 
 // Withdrawal API types

@@ -218,10 +218,10 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
 
   try {
     // Only process UPDATE events
-    if (webhookData.event !== 'UPDATE') {
-      console.log('[WebhookHandler] Ignoring non-UPDATE event for payment-manager');
-      return { success: true, ignored: true };
-    }
+    // if (webhookData.event !== 'UPDATE') {
+    //   console.log('[WebhookHandler] Ignoring non-UPDATE event for payment-manager');
+    //   return { success: true, ignored: true };
+    // }
 
     // Determine external reference to locate the payment
     const externalRef = webhookData.payment.externalId || webhookData.payment.id;
@@ -246,24 +246,20 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
     // Update payment status and transaction details
     await db.updatePaymentStatus(externalRef, status, {
       provider: 'payment-manager',
-      ...webhookData,
+      webhookData: webhookData,
     });
 
-    // Save source details if provided
-    if (webhookData.payment.payerAddress && webhookData.payment.transactionHash) {
-      await db.updatePaymentSourceDetails(
-        externalRef,
-        webhookData.payment.payerAddress,
-        webhookData.payment.transactionHash
-      );
-    }
+    // Note: No withdrawal integration for Payment Manager as requested
+    console.log(
+      `[WebhookHandler] Payment Manager webhook processed successfully for payment: ${externalRef}`
+    );
 
     return {
       success: true,
       message: 'Payment Manager webhook processed successfully',
       paymentId: externalRef,
       status: status,
-      transaction_hash: webhookData.payment.transactionHash || null,
+      url: webhookData.url,
       processed_at: new Date().toISOString(),
     };
   } catch (error) {
