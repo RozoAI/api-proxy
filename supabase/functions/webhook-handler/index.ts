@@ -1,9 +1,16 @@
+/// <reference lib="deno.ns" />
+
 // Webhook Handler Edge Function
 // Original API Compatible: Handles both Daimo and Aqua webhooks
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentDatabase } from '../shared/database.ts';
-import type { DaimoWebhookEvent, AquaWebhookEvent, PaymentStatus } from '../shared/types.ts';
+import type {
+  AquaWebhookEvent,
+  DaimoWebhookEvent,
+  PaymentManagerWebhookEvent,
+  PaymentStatus,
+} from '../shared/types.ts';
 
 const db = new PaymentDatabase();
 
@@ -56,6 +63,8 @@ serve(async (req) => {
       result = await handleDaimoWebhook(webhookData as DaimoWebhookEvent);
     } else if (provider === 'aqua') {
       result = await handleAquaWebhook(webhookData as AquaWebhookEvent);
+    } else if (provider === 'payment-manager') {
+      result = await handlePaymentManagerWebhook(webhookData as PaymentManagerWebhookEvent);
     } else {
       return new Response(
         JSON.stringify({
@@ -98,31 +107,28 @@ async function handleDaimoWebhook(webhookData: DaimoWebhookEvent): Promise<any> 
     const status = mapDaimoWebhookEventToStatus(webhookData.type);
 
     const payment = await db.getPaymentByExternalId(externalId);
+    if (!payment) {
+      console.warn(`[WebhookHandler] No payment found for Daimo payment: ${externalId}`);
+      return {
+        success: false,
+        message: 'Payment not found',
+        paymentId: externalId,
+      };
+    }
 
-    // Update payment status in database
-    await db.updatePaymentStatus(externalId, status);
+    // Update payment status and transaction details
+    await db.updatePaymentStatus(externalId, status, {
+      source_address: webhookData.payment.source?.payerAddress,
+      source_tx_hash: webhookData.txHash,
+      provider_response: webhookData,
+    });
 
-    // If payment is completed, save source transaction details and trigger withdrawal
-    if (status === 'payment_completed' && webhookData.payment) {
-      // Extract source transaction details from Daimo webhook
-      const sourceAddress = webhookData.payment.source?.payerAddress;
-      const sourceTxHash = webhookData.payment.source?.txHash;
-
-      // Save source transaction details if available
-      if (sourceAddress && sourceTxHash) {
-        console.log(
-          `[WebhookHandler] Saving source transaction details for payment: ${externalId}`
-        );
-        await db.updatePaymentSourceDetails(externalId, sourceAddress, sourceTxHash);
-      }
-
-      // Trigger withdrawal integration if not already completed
-      if (payment && payment?.status !== 'payment_completed') {
-        console.log(
-          `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${externalId}`
-        );
-        await triggerWithdrawalIntegration(externalId);
-      }
+    // If payment is completed, trigger withdrawal integration
+    if (status === 'payment_completed') {
+      console.log(
+        `[WebhookHandler] Payment completed, triggering withdrawal integration for: ${payment.id}`
+      );
+      await triggerWithdrawalIntegration(payment.id);
     }
 
     return {
@@ -205,6 +211,63 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
   }
 }
 
+async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEvent): Promise<any> {
+  console.log(
+    `[WebhookHandler] Processing Payment Manager webhook for payment: ${webhookData.payment.id}`
+  );
+
+  try {
+    // Only process UPDATE events
+    // if (webhookData.event !== 'UPDATE') {
+    //   console.log('[WebhookHandler] Ignoring non-UPDATE event for payment-manager');
+    //   return { success: true, ignored: true };
+    // }
+
+    // Determine external reference to locate the payment
+    const externalRef = webhookData.payment.externalId || webhookData.payment.id;
+
+    // Map Payment Manager status to our status
+    const status = mapPaymentManagerStatusToPaymentStatus(webhookData.payment.status);
+
+    // Find payment by external_id (matches provider payment id saved on creation)
+    const existingPayment = await db.getPaymentByExternalId(externalRef);
+
+    if (!existingPayment) {
+      console.warn(
+        `[WebhookHandler] No payment found for Payment Manager payment using ref: ${externalRef}`
+      );
+      return {
+        success: false,
+        message: 'Payment not found',
+        paymentId: externalRef,
+      };
+    }
+
+    // Update payment status and transaction details
+    await db.updatePaymentStatus(externalRef, status, {
+      provider: 'payment-manager',
+      webhookData: webhookData,
+    });
+
+    // Note: No withdrawal integration for Payment Manager as requested
+    console.log(
+      `[WebhookHandler] Payment Manager webhook processed successfully for payment: ${externalRef}`
+    );
+
+    return {
+      success: true,
+      message: 'Payment Manager webhook processed successfully',
+      paymentId: externalRef,
+      status: status,
+      url: webhookData.url,
+      processed_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error(`[WebhookHandler] Error processing Payment Manager webhook:`, error);
+    throw error;
+  }
+}
+
 function mapDaimoWebhookEventToStatus(eventType: string): PaymentStatus {
   const statusMap: Record<string, PaymentStatus> = {
     payment_started: 'payment_started',
@@ -228,154 +291,55 @@ function mapAquaStatusToPaymentStatus(aquaStatus: string): PaymentStatus {
   return statusMap[aquaStatus] || 'payment_unpaid';
 }
 
+function mapPaymentManagerStatusToPaymentStatus(paymentManagerStatus: string): PaymentStatus {
+  const statusMap: Record<string, PaymentStatus> = {
+    payment_unpaid: 'payment_unpaid',
+    payment_started: 'payment_started',
+    payment_completed: 'payment_completed',
+    payment_bounced: 'payment_bounced',
+    payment_refunded: 'payment_refunded',
+  };
+
+  return statusMap[paymentManagerStatus] || 'payment_unpaid';
+}
+
 function isValidWebhookToken(provider: string | null, token: string): boolean {
   if (!provider || !token) return false;
 
   const expectedTokens: Record<string, string> = {
     daimo: Deno.env.get('DAIMO_WEBHOOK_TOKEN') || 'daimo-webhook-token',
     aqua: Deno.env.get('AQUA_WEBHOOK_TOKEN') || 'aqua-webhook-token',
+    'payment-manager':
+      Deno.env.get('PAYMENT_MANAGER_WEBHOOK_TOKEN') || 'payment-manager-webhook-token',
   };
 
   return expectedTokens[provider] === token;
 }
 
 async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {
-  try {
-    // Check if withdrawal integration is enabled
-    const withdrawalApiUrl = Deno.env.get('WITHDRAWAL_API_BASE_URL');
-    const withdrawalEnabled = Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true';
+  // Check if withdrawal integration is enabled
+  const withdrawalEnabled = Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true';
+  if (!withdrawalEnabled) {
+    console.log(`[WebhookHandler] Withdrawal integration disabled for payment: ${paymentId}`);
+    return;
+  }
 
-    if (!withdrawalEnabled || !withdrawalApiUrl) {
-      console.log(
-        `[WebhookHandler] Withdrawal integration disabled or not configured for payment: ${paymentId}`
-      );
-      return;
-    }
+  try {
+    // Import withdrawal integration dynamically to avoid circular dependencies
+    const { WithdrawalIntegration } = await import('../shared/withdrawal-integration.ts');
+    const withdrawalIntegration = new WithdrawalIntegration();
 
     // Get payment details
-    const payment = await db.getPaymentByExternalId(paymentId);
+    const payment = await db.getPaymentById(paymentId);
     if (!payment) {
-      console.error(`[WebhookHandler] Payment not found for withdrawal integration: ${paymentId}`);
+      console.error(`[WebhookHandler] Payment not found for withdrawal: ${paymentId}`);
       return;
     }
 
-    // Check if this payment has USDC_XLM destination stored in metadata
-    let withdrawalDestination: any = null;
-    let isUSDCXLMWithdrawal = false;
-
-    try {
-      // Try to parse withdrawal destination from metadata
-      const metadata = payment.metadata || {};
-      if (metadata.withdrawal_destination) {
-        withdrawalDestination = metadata.withdrawal_destination;
-        isUSDCXLMWithdrawal =
-          withdrawalDestination.isUSDCXLM === true ||
-          withdrawalDestination.tokenSymbol === 'USDC_XLM';
-      }
-    } catch (error) {
-      console.log(
-        `[WebhookHandler] Could not parse withdrawal destination for ${paymentId}:`,
-        error
-      );
-    }
-
-    // Only process withdrawals for specific currencies/tokens or XLM conversions
-    const supportedConversions = ['USDC', 'USDC_XLM', 'XLM']; // Based on original design
-    const paymentCurrency = payment.original_request?.destination?.tokenSymbol || payment.currency;
-
-    if (!supportedConversions.includes(paymentCurrency) && !isUSDCXLMWithdrawal) {
-      console.log(
-        `[WebhookHandler] Currency ${paymentCurrency} not supported for withdrawal, skipping: ${paymentId}`
-      );
-      return;
-    }
-
-    // Determine withdrawal details based on whether this is XLM conversion
-    let withdrawalPayload: any;
-
-    if (isUSDCXLMWithdrawal && withdrawalDestination) {
-      console.log(
-        `[WebhookHandler] Processing USDC_XLM withdrawal to Stellar address: ${withdrawalDestination.address}`
-      );
-
-      withdrawalPayload = {
-        amount: payment.amount,
-        to_address: withdrawalDestination.address, // Original Stellar address
-        chain: 'stellar',
-        token: 'USDC', // Convert back to XLM on Stellar
-      };
-    } else {
-      // Regular withdrawal (non-XLM)
-      withdrawalPayload = {
-        amount: payment.amount,
-        to_address: withdrawalDestination.address, // Original Stellar address
-        chain: withdrawalDestination.chainId === '8453' ? 'base' : 'stellar',
-        token: 'USDC',
-      };
-    }
-
-    console.log('withdrawalApiUrl', withdrawalApiUrl);
-    console.log('withdrawalApiToken', Deno.env.get('WITHDRAWAL_API_TOKEN'));
-    console.log('withdrawalPayload', withdrawalPayload);
-
-    // Trigger withdrawal integration
-    const withdrawalResponse = await fetch(`${withdrawalApiUrl}/functions/v1/withdrawals`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${Deno.env.get('WITHDRAWAL_API_TOKEN') || ''}`,
-      },
-      body: JSON.stringify(withdrawalPayload),
-    });
-
-    if (!withdrawalResponse.ok) {
-      console.log('withdrawalResponse', withdrawalResponse.statusText);
-      throw new Error(`Withdrawal API error: ${withdrawalResponse.status}`);
-    }
-
-    if (!withdrawalResponse.ok) {
-      const errorText = await withdrawalResponse.text();
-      throw new Error(
-        `Withdrawal API error ${withdrawalResponse.status}: ${errorText || 'Unknown error'}`
-      );
-    }
-
-    const withdrawalText = await withdrawalResponse.text();
-    const withdrawalResult = withdrawalText ? JSON.parse(withdrawalText) : {};
-    console.log(
-      `[WebhookHandler] Withdrawal integration triggered for ${paymentId}:`,
-      withdrawalResult
-    );
-
-    // Save withdrawal transaction details if available
-    if (withdrawalResult.success && withdrawalResult.data) {
-      const withdrawId = withdrawalResult.data.withdraw_id;
-      const transactionHash = withdrawalResult.data.transaction_hash;
-
-      if (transactionHash) {
-        console.log(
-          `[WebhookHandler] Saving withdrawal transaction hash for payment ${paymentId}: ${transactionHash}`
-        );
-        await db.updatePaymentWithdrawalTxHash(paymentId, transactionHash, withdrawId);
-      } else if (withdrawId) {
-        // Save withdrawal ID even if transaction hash is not available yet
-        console.log(
-          `[WebhookHandler] Saving withdrawal ID for payment ${paymentId}: ${withdrawId}`
-        );
-        await db.updatePaymentWithWithdrawId(paymentId, withdrawId);
-      }
-    } else if (withdrawalResult.withdraw_id) {
-      // Fallback for older response format
-      console.log(
-        `[WebhookHandler] Withdrawal ID ${withdrawalResult.withdraw_id} created for payment ${paymentId}`
-      );
-      await db.updatePaymentWithWithdrawId(paymentId, withdrawalResult.withdraw_id);
-    }
+    // Trigger withdrawal
+    await withdrawalIntegration.handlePaymentCompletion(payment);
   } catch (error) {
-    console.error(
-      `[WebhookHandler] Failed to trigger withdrawal integration for ${paymentId}:`,
-      error
-    );
-    // Don't throw - webhook processing should still succeed even if withdrawal fails
+    console.error(`[WebhookHandler] Error triggering withdrawal integration:`, error);
+    // Don't throw - we don't want to fail the webhook
   }
 }

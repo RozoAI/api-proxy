@@ -17,6 +17,7 @@ export class PaymentService {
     console.log('[PaymentService] Creating payment:', {
       preferredChain: paymentData.preferredChain,
       preferredToken: paymentData.preferredToken,
+      preferredTokenAddress: paymentData.preferredTokenAddress,
       withdrawalAddress: paymentData.destination.destinationAddress,
       withdrawalAmount: paymentData.destination.amountUnits,
     });

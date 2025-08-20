@@ -90,6 +90,14 @@ async function handleCreatePayment(paymentData: PaymentRequest): Promise<Respons
 
 async function handleGetPayment(paymentId: string): Promise<Response> {
   try {
+    console.log('[PaymentAPI] Getting payment:', paymentId);
+
+    console.log(
+      'WITHDRAWAL_API_BASE_URL - ',
+      Deno.env.get('WITHDRAWAL_API_BASE_URL'),
+      Deno.env.get('WITHDRAWAL_API_JWT_TOKEN')
+    );
+
     const paymentResponse = await paymentService.getPaymentById(paymentId);
 
     return new Response(JSON.stringify(paymentResponse), {

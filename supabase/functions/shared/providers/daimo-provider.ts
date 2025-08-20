@@ -1,6 +1,5 @@
 // Daimo Provider for Edge Functions
 // Acts as a pure proxy - passes requests through to Daimo using their actual API format
-import { BaseProvider } from './base-provider.ts';
 import type {
   PaymentRequest,
   PaymentResponse,
@@ -8,6 +7,7 @@ import type {
   ProviderConfig,
   ProviderHealth,
 } from '../types.ts';
+import { BaseProvider } from './base-provider.ts';
 
 export class DaimoProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
@@ -40,7 +40,19 @@ export class DaimoProvider extends BaseProvider {
       const responseData = JSON.parse(responseText);
       this.logResponse(response, responseData);
 
-      return this.transformFromDaimoResponse(responseData, paymentData);
+      // For Base chain payments, fetch deposit address from Rozo API
+      let depositAddressDetails = null;
+      if (paymentData.preferredChain === '8453') {
+        // Base chain
+        try {
+          depositAddressDetails = await this.fetchDepositAddressFromRozo(responseData.id);
+        } catch (error) {
+          console.warn('[DaimoProvider] Failed to fetch deposit address from Rozo:', error);
+          // Don't fail the payment creation if Rozo API fails
+        }
+      }
+
+      return this.transformFromDaimoResponse(responseData, paymentData, depositAddressDetails);
     } catch (error) {
       this.logError(error as Error, 'createPayment');
       throw error;
@@ -128,12 +140,8 @@ export class DaimoProvider extends BaseProvider {
     // Check if destination token is USDC_XLM - if so, use USDC Base address from env
     const isUSDCXLMDestination = paymentData.destination.tokenSymbol === 'USDC_XLM';
 
-    console.log('[DEBUG] [daimo] USDC_XLM conversion check:', {
-      preferredToken: paymentData.preferredToken,
-      destinationTokenSymbol: paymentData.destination.tokenSymbol,
-      isUSDCXLMDestination: isUSDCXLMDestination,
-      originalAddress: paymentData.destination.destinationAddress,
-    });
+    // Determine destination token address: prefer explicit destination.tokenAddress
+    const destinationTokenAddress = paymentData.destination.tokenAddress || undefined;
 
     const finalDestination = isUSDCXLMDestination
       ? {
@@ -146,23 +154,24 @@ export class DaimoProvider extends BaseProvider {
       : {
           destinationAddress: paymentData.destination.destinationAddress,
           chainId: parseInt(paymentData.destination.chainId),
-          tokenAddress: paymentData.destination.tokenAddress,
+          tokenAddress: destinationTokenAddress,
           amountUnits: paymentData.destination.amountUnits,
         };
 
-    console.log('[DEBUG] [daimo] Final destination:', finalDestination);
+    // Determine pay-in preferred token address: prefer preferredTokenAddress if provided
+    const payinTokenAddress = paymentData.preferredTokenAddress || finalDestination.tokenAddress;
 
     return {
       display: {
         intent: paymentData.display.intent,
         // Map our preferredChain to Daimo's preferredChains array
         preferredChains: [parseInt(paymentData.preferredChain)],
-        // For XLM, use USDC Base token; otherwise use original
-        ...(finalDestination.tokenAddress && {
+        // If an explicit token address is provided, add preferredTokens mapping
+        ...(payinTokenAddress && {
           preferredTokens: [
             {
               chain: parseInt(paymentData.preferredChain),
-              address: finalDestination.tokenAddress,
+              address: payinTokenAddress,
             },
           ],
         }),
@@ -192,7 +201,8 @@ export class DaimoProvider extends BaseProvider {
 
   private transformFromDaimoResponse(
     daimoResponse: any,
-    originalRequest?: PaymentRequest
+    originalRequest?: PaymentRequest,
+    depositAddressDetails?: any
   ): PaymentResponse {
     // Daimo returns the payment object inside a wrapper for create, or directly for get
     const payment = daimoResponse.payment || daimoResponse;
@@ -207,7 +217,7 @@ export class DaimoProvider extends BaseProvider {
       },
       source: payment.source || null,
       destination: {
-        destinationAddress: payment.destination?.destinationAddress || '',
+        destinationAddress: depositAddressDetails?.address || '',
         txHash: payment.destination?.txHash || null,
         chainId: payment.destination?.chainId?.toString() || '',
         amountUnits: payment.destination?.amountUnits || '',
@@ -220,9 +230,62 @@ export class DaimoProvider extends BaseProvider {
         provider: 'daimo',
         preferred_chain: originalRequest?.preferredChain || payment.metadata?.preferred_chain,
         preferred_token: originalRequest?.preferredToken || payment.metadata?.preferred_token,
+        // Add deposit expiration for Base chain payments
+        ...(depositAddressDetails && {
+          deposit_expiration: depositAddressDetails.expirationS,
+        }),
       },
-      url: daimoResponse.url || `${this.config.baseUrl}/checkout?id=${payment.id}`,
+      url:
+        daimoResponse.url?.replace('https://pay.daimo.com', 'https://intentapi.rozo.ai') ||
+        `${this.config.baseUrl}/checkout?id=${payment.id}`,
+      // Add deposit expiration for Base chain payments
+      ...(depositAddressDetails && {
+        depositExpiration: depositAddressDetails.expirationS,
+      }),
     };
+  }
+
+  private async fetchDepositAddressFromRozo(orderId: string): Promise<any> {
+    const rozoUrl = 'https://intentapi.rozo.ai/getDepositAddressForOrder';
+    const params = new URLSearchParams({
+      batch: '1',
+      input: JSON.stringify({
+        '0': {
+          orderId: orderId,
+          option: 'Base',
+        },
+      }),
+    });
+
+    const fullUrl = `${rozoUrl}?${params.toString()}`;
+    console.log('[DaimoProvider] Fetching deposit address from Rozo:', fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Rozo API error ${response.status}: ${await response.text()}`);
+    }
+
+    const responseData = await response.json();
+    console.log('[DaimoProvider] Rozo API response:', responseData);
+
+    // Extract the first result from the array
+    if (Array.isArray(responseData) && responseData.length > 0) {
+      const result = responseData[0];
+      if (result.result?.data) {
+        return {
+          address: result.result.data.address,
+          expirationS: result.result.data.expirationS,
+        };
+      }
+    }
+
+    throw new Error('Invalid response format from Rozo API');
   }
 
   private mapDaimoStatus(daimoStatus: string): string {

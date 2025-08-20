@@ -1,53 +1,51 @@
 // Payment Router for Edge Functions
-// Migrated from original Express.js architecture with sophisticated provider management
-import { DaimoProvider } from './providers/daimo-provider.ts';
+// Modified to use Payment Manager as the primary provider while keeping pluggable architecture
+import { PROVIDER_CONFIG, getProviderForChain } from './provider-config.ts';
 import { AquaProvider } from './providers/aqua-provider.ts';
-import type { PaymentRequest, PaymentResponse, ProviderConfig, ChainConfig } from './types.ts';
+import { DaimoProvider } from './providers/daimo-provider.ts';
+import { PaymentManagerProvider } from './providers/payment-manager-provider.ts';
+import type { ChainConfig, PaymentRequest, PaymentResponse, ProviderConfig } from './types.ts';
 
-// Complete chain configurations matching original architecture
+export const SOLANA_CHAIN_ID = '900';
+export const POLYGON_CHAIN_ID = '137';
+
+// Updated chain configurations - Payment Manager is now the primary provider
 const CHAIN_CONFIGS: ChainConfig[] = [
-  // Daimo Provider Chains (Ethereum Ecosystem)
-  { chainId: 1, name: 'Ethereum Mainnet', provider: 'daimo', enabled: true },
-  { chainId: 10, name: 'Optimism', provider: 'daimo', enabled: true },
-  { chainId: 137, name: 'Polygon', provider: 'daimo', enabled: true },
-  { chainId: 42161, name: 'Arbitrum One', provider: 'daimo', enabled: true },
-  { chainId: 8453, name: 'Base', provider: 'daimo', enabled: true },
-  { chainId: 56, name: 'BSC', provider: 'daimo', enabled: true },
-  { chainId: 43114, name: 'Avalanche', provider: 'daimo', enabled: true },
-  { chainId: 250, name: 'Fantom', provider: 'daimo', enabled: true },
-  { chainId: 314, name: 'Filecoin', provider: 'daimo', enabled: true },
-  { chainId: 42220, name: 'Celo', provider: 'daimo', enabled: true },
-  { chainId: 100, name: 'Gnosis', provider: 'daimo', enabled: true },
-  { chainId: 1101, name: 'Polygon zkEVM', provider: 'daimo', enabled: true },
-  { chainId: 59144, name: 'Linea', provider: 'daimo', enabled: true },
-  { chainId: 5000, name: 'Mantle', provider: 'daimo', enabled: true },
-  { chainId: 534352, name: 'Scroll', provider: 'daimo', enabled: true },
-  { chainId: 324, name: 'zkSync', provider: 'daimo', enabled: true },
+  // Payment Manager Provider - Primary provider for all chains
+  { chainId: 1, name: 'Ethereum Mainnet', provider: 'payment-manager', enabled: true },
+  { chainId: 11155111, name: 'Sepolia Testnet', provider: 'payment-manager', enabled: true },
+  { chainId: 10, name: 'Optimism', provider: 'payment-manager', enabled: true },
+  { chainId: 42161, name: 'Arbitrum One', provider: 'payment-manager', enabled: true },
+  { chainId: 8453, name: 'Base', provider: 'payment-manager', enabled: true },
+  { chainId: 56, name: 'BSC', provider: 'payment-manager', enabled: true },
+  { chainId: 137, name: 'Polygon', provider: 'payment-manager', enabled: true },
+  { chainId: 80001, name: 'Mumbai Testnet', provider: 'payment-manager', enabled: true },
+  { chainId: 900, name: 'Solana Mainnet', provider: 'payment-manager', enabled: true },
+  { chainId: 901, name: 'Solana Devnet', provider: 'payment-manager', enabled: true },
+  { chainId: 1500, name: 'Stellar Mainnet', provider: 'payment-manager', enabled: true },
+  { chainId: 1501, name: 'Stellar Testnet', provider: 'payment-manager', enabled: true },
 
-  // Aqua Provider Chains (Stellar Ecosystem)
-  { chainId: 10001, name: 'Stellar', provider: 'aqua', enabled: true, tokens: ['XLM', 'USDC_XLM'] },
+  // Legacy providers - disabled by default but can be enabled if needed
+  // Daimo Provider Chains (Ethereum Ecosystem) - DISABLED
+  { chainId: 1, name: 'Ethereum Mainnet (Daimo)', provider: 'daimo', enabled: false },
+  { chainId: 10, name: 'Optimism (Daimo)', provider: 'daimo', enabled: false },
+  { chainId: 42161, name: 'Arbitrum One (Daimo)', provider: 'daimo', enabled: false },
+  { chainId: 8453, name: 'Base (Daimo)', provider: 'daimo', enabled: false },
+  { chainId: 56, name: 'BSC (Daimo)', provider: 'daimo', enabled: false },
+  { chainId: 137, name: 'Polygon (Daimo)', provider: 'daimo', enabled: false },
+
+  // Aqua Provider Chains (Stellar Ecosystem) - DISABLED
+  {
+    chainId: 1500,
+    name: 'Stellar Mainnet (Aqua)',
+    provider: 'aqua',
+    enabled: false,
+    tokens: ['XLM', 'USDC_XLM'],
+  },
 ];
 
-// Provider configurations
-const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
-  daimo: {
-    name: 'daimo',
-    baseUrl: Deno.env.get('DAIMO_BASE_URL') || 'https://pay.daimo.com',
-    apiKey: Deno.env.get('DAIMO_API_KEY'),
-    timeout: 30000,
-    enabled: true,
-  },
-  aqua: {
-    name: 'aqua',
-    baseUrl: Deno.env.get('AQUA_BASE_URL') || 'https://api.aqua.network',
-    apiKey: Deno.env.get('AQUA_API_TOKEN'),
-    timeout: 30000,
-    enabled: true,
-  },
-};
-
 export class PaymentRouter {
-  private providers: Map<string, DaimoProvider | AquaProvider>;
+  private providers: Map<string, DaimoProvider | AquaProvider | PaymentManagerProvider>;
 
   constructor() {
     this.providers = new Map();
@@ -55,15 +53,22 @@ export class PaymentRouter {
   }
 
   private initializeProviders(): void {
-    // Initialize Daimo provider
-    if (PROVIDER_CONFIGS.daimo.enabled) {
-      this.providers.set('daimo', new DaimoProvider(PROVIDER_CONFIGS.daimo));
-    }
-
-    // Initialize Aqua provider
-    if (PROVIDER_CONFIGS.aqua.enabled) {
-      this.providers.set('aqua', new AquaProvider(PROVIDER_CONFIGS.aqua));
-    }
+    // Initialize providers based on configuration
+    Object.entries(PROVIDER_CONFIG.providers).forEach(([name, config]) => {
+      if (config.enabled) {
+        switch (name) {
+          case 'payment-manager':
+            this.providers.set(name, new PaymentManagerProvider(config as ProviderConfig));
+            break;
+          case 'daimo':
+            this.providers.set(name, new DaimoProvider(config as ProviderConfig));
+            break;
+          case 'aqua':
+            this.providers.set(name, new AquaProvider(config as ProviderConfig));
+            break;
+        }
+      }
+    });
 
     console.log(
       `[PaymentRouter] Initialized ${this.providers.size} providers:`,
@@ -103,86 +108,78 @@ export class PaymentRouter {
       throw new Error(`Provider ${providerName} not available for chain ${chainId}`);
     }
 
-    console.log(`[PaymentRouter] Getting payment from ${providerName} for payment ${paymentId}`);
-
     try {
       return await provider.getPayment(paymentId);
     } catch (error) {
-      console.error(`[PaymentRouter] Error getting payment from ${providerName}:`, error);
+      console.error(`[PaymentRouter] Error getting payment with ${providerName}:`, error);
       throw error;
     }
   }
 
   getProviderForChain(chainId: string): string {
-    const chainIdNum = parseInt(chainId);
-    const config = CHAIN_CONFIGS.find((c) => c.chainId === chainIdNum && c.enabled);
-
-    if (!config) {
-      console.warn(`[PaymentRouter] No config found for chain ${chainId}, using default provider`);
-      return 'daimo'; // Default provider
-    }
-
-    const provider = this.providers.get(config.provider);
-    if (!provider || !provider.isEnabled()) {
-      console.warn(`[PaymentRouter] Provider ${config.provider} not available, using default`);
-      return 'daimo'; // Fallback to default
-    }
-
-    return config.provider;
+    // Use the configuration helper function
+    return getProviderForChain(chainId);
   }
 
   private validatePaymentRequest(paymentData: PaymentRequest, providerName: string): void {
-    const { destination, preferredChain, preferredToken } = paymentData;
-
-    // Validate required fields
-    if (!destination.destinationAddress) {
-      throw new Error('Destination address is required for withdrawal');
+    // Common validations
+    if (!paymentData.display?.intent) {
+      throw new Error('Payment intent is required');
     }
 
-    if (!destination.amountUnits || parseFloat(destination.amountUnits) <= 0) {
-      throw new Error('Valid withdrawal amount is required');
+    if (
+      !paymentData.destination?.amountUnits ||
+      parseFloat(paymentData.destination.amountUnits) <= 0
+    ) {
+      throw new Error('Valid amount is required');
     }
 
-    if (!preferredChain) {
-      throw new Error('Preferred chain is required for payment routing');
+    // Provider-specific validations
+    switch (providerName) {
+      case 'payment-manager':
+        this.validatePaymentManagerRequest(paymentData);
+        break;
+      case 'daimo':
+        this.validateDaimoRequest(paymentData);
+        break;
+      case 'aqua':
+        this.validateAquaRequest(paymentData);
+        break;
+      default:
+        throw new Error(`Unknown provider: ${providerName}`);
     }
+  }
 
-    if (!preferredToken) {
-      throw new Error('Preferred token is required for payment processing');
-    }
+  private validatePaymentManagerRequest(paymentData: PaymentRequest): void {
+    // Payment Manager supports all chains now
+    // No specific chain validation needed
+  }
 
-    // Provider-specific validation
-    if (providerName === 'aqua') {
-      this.validateAquaRequest(paymentData);
+  private validateDaimoRequest(paymentData: PaymentRequest): void {
+    // Daimo supports all EVM chains and tokens
+    const supportedChains = [
+      1, 10, 137, 42161, 8453, 56, 43114, 250, 314, 42220, 100, 1101, 59144, 5000, 534352, 324,
+    ];
+    const chainId = parseInt(paymentData.preferredChain);
+
+    if (!supportedChains.includes(chainId)) {
+      throw new Error(`Daimo does not support chain ID: ${chainId}`);
     }
   }
 
   private validateAquaRequest(paymentData: PaymentRequest): void {
-    const { destination, preferredToken } = paymentData;
-    const provider = this.providers.get('aqua') as AquaProvider;
-
-    // Validate withdrawal amount (destination)
-    if (!provider.isValidStellarAmount(destination.amountUnits)) {
-      throw new Error('Invalid withdrawal amount format for Stellar (max 7 decimal places)');
+    // Aqua only supports Stellar (10001)
+    if (paymentData.preferredChain !== '10001') {
+      throw new Error('Aqua only supports Stellar (chain ID: 10001)');
     }
 
-    // Validate preferred token for payment processing
-    const supportedTokens = ['XLM', 'USDC_XLM', 'USDC'];
-    if (!supportedTokens.includes(preferredToken)) {
-      throw new Error(
-        `Unsupported preferred token: ${preferredToken}. Supported: ${supportedTokens.join(', ')}`
-      );
-    }
-
-    // Validate withdrawal token symbol if provided
-    if (destination.tokenSymbol && !supportedTokens.includes(destination.tokenSymbol)) {
-      throw new Error(
-        `Unsupported withdrawal token: ${destination.tokenSymbol}. Supported: ${supportedTokens.join(', ')}`
-      );
+    // Validate token
+    const supportedTokens = ['XLM', 'USDC_XLM'];
+    if (!supportedTokens.includes(paymentData.preferredToken)) {
+      throw new Error(`Aqua does not support token: ${paymentData.preferredToken}`);
     }
   }
 
-  // Health check for all providers
   async checkProvidersHealth(): Promise<Record<string, any>> {
     const healthResults: Record<string, any> = {};
 
@@ -201,32 +198,11 @@ export class PaymentRouter {
     return healthResults;
   }
 
-  // Get supported chains
   getSupportedChains(): ChainConfig[] {
-    return CHAIN_CONFIGS.filter((chain) => {
-      const provider = this.providers.get(chain.provider);
-      return chain.enabled && provider && provider.isEnabled();
-    });
+    return CHAIN_CONFIGS.filter((chain) => chain.enabled);
   }
 
-  // Get provider configurations (for status endpoint)
   getProviderConfigs(): Record<string, any> {
-    const configs: Record<string, any> = {};
-
-    for (const [name, provider] of this.providers) {
-      const supportedChains = CHAIN_CONFIGS.filter((c) => c.provider === name && c.enabled).map(
-        (c) => c.chainId
-      );
-
-      configs[name] = {
-        name: provider.getName(),
-        baseUrl: provider.getBaseUrl(),
-        enabled: provider.isEnabled(),
-        timeout: provider.getTimeout(),
-        supportedChains,
-      };
-    }
-
-    return configs;
+    return PROVIDER_CONFIG.providers;
   }
 }
