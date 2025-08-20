@@ -1,7 +1,6 @@
 # Payment API Proxy - Supabase Edge Functions
 
-A multi-provider payment gateway built with Supabase Edge Functions, supporting
-Daimo Pay and Aqua payment providers with automatic withdrawal integration.
+A multi-provider payment gateway built with Supabase Edge Functions, currently configured to use **Payment Manager** as the primary provider for all chains, with support for Daimo and Aqua providers as alternatives.
 
 ## 🏗️ Architecture Overview
 
@@ -12,20 +11,22 @@ structure:
 supabase/
 ├── functions/
 │   ├── payment-api/           # Payment creation & retrieval
-│   ├── webhook-handler/       # Daimo & Aqua webhook processing  
+│   ├── webhook-handler/       # Payment Manager webhook processing
 │   ├── api-health/            # System health & provider status
 │   └── shared/               # Shared utilities & types
+│       ├── provider-config.ts # Provider configuration & switching
+│       └── providers/        # Payment provider implementations
 ├── migrations/              # Database schema & tables
 └── config.toml             # Supabase configuration
 ```
 
 ### 🚀 Edge Functions
 
-| Function          | Endpoint                        | Description                                      |
-| ----------------- | ------------------------------- | ------------------------------------------------ |
-| `payment-api`     | `/functions/v1/payment-api`     | Create payments, get payment status              |
-| `webhook-handler` | `/functions/v1/webhook-handler` | Process Daimo/Aqua webhooks, trigger withdrawals |
-| `api-health`      | `/functions/v1/api-health`      | System health, provider status                   |
+| Function          | Endpoint                        | Description                         |
+| ----------------- | ------------------------------- | ----------------------------------- |
+| `payment-api`     | `/functions/v1/payment-api`     | Create payments, get payment status |
+| `webhook-handler` | `/functions/v1/webhook-handler` | Process Payment Manager webhooks    |
+| `api-health`      | `/functions/v1/api-health`      | System health, provider status      |
 
 ### 🗄️ Database Schema
 
@@ -34,6 +35,35 @@ supabase/
 - **Real-time subscriptions** for payment updates
 - **Optimized indexes** for performance
 - **CHECK constraints** for data integrity
+
+## 🔧 Provider Configuration
+
+The system is currently configured to use **Payment Manager** as the primary provider for all chains. You can easily switch providers by modifying the configuration file.
+
+### Current Setup
+
+- **Primary Provider**: Payment Manager
+- **Supported Chains**: All chains (Ethereum, Solana, Stellar, Polygon, etc.)
+- **Webhook Structure**: New format compatible with Payment Manager
+- **Withdrawal Integration**: Disabled for Payment Manager
+
+### Switching Providers
+
+See [PROVIDER_SWITCHING.md](./PROVIDER_SWITCHING.md) for detailed instructions on how to switch between providers.
+
+Quick switch example:
+
+```typescript
+// In supabase/functions/shared/provider-config.ts
+export const PROVIDER_CONFIG = {
+  primaryProvider: 'payment-manager', // Change to 'daimo' or 'aqua'
+  providers: {
+    'payment-manager': { enabled: true },
+    daimo: { enabled: false },
+    aqua: { enabled: false },
+  },
+};
+```
 
 ## 📋 Prerequisites
 
@@ -94,26 +124,26 @@ Create environment secrets in your Supabase dashboard or use CLI:
 supabase secrets set NODE_ENV=production
 supabase secrets set CORS_ORIGINS="https://yourapp.com,https://yourdomain.com"
 
+# Payment Manager Provider (Primary)
+supabase secrets set PAYMENT_MANAGER_BASE_URL="https://rozo-payment-manager.example.com"
+supabase secrets set PAYMENT_MANAGER_API_KEY="your-payment-manager-api-key"
+supabase secrets set PAYMENT_MANAGER_WEBHOOK_TOKEN="your-payment-manager-webhook-token"
+
+# Optional: Alternative Providers (Disabled by default)
 # Daimo Provider
 supabase secrets set DAIMO_API_KEY="your-daimo-api-key"
 supabase secrets set DAIMO_BASE_URL="https://pay.daimo.com"
 supabase secrets set DAIMO_WEBHOOK_TOKEN="your-daimo-webhook-token"
 
-# Aqua Provider  
+# Aqua Provider
 supabase secrets set AQUA_BASE_URL="https://api.aqua.network"
 supabase secrets set AQUA_API_TOKEN="your-aqua-api-token"
 supabase secrets set AQUA_WEBHOOK_TOKEN="your-aqua-webhook-token"
 
-# Payment Manager Provider
-supabase secrets set PAYMENT_MANAGER_BASE_URL="https://rozo-payment-manager.example.com"
-supabase secrets set PAYMENT_MANAGER_API_KEY="your-payment-manager-api-key"
-supabase secrets set PAYMENT_MANAGER_SOLANA_ADDRESS="your-solana-destination-address"
-supabase secrets set PAYMENT_MANAGER_WEBHOOK_TOKEN="your-payment-manager-webhook-token"
-
-# Withdrawal Integration
+# Withdrawal Integration (Disabled for Payment Manager)
 supabase secrets set WITHDRAWAL_API_BASE_URL="https://proj-ref.supabase.co"
 supabase secrets set WITHDRAWAL_API_JWT_TOKEN="your-withdrawal-jwt-token"
-supabase secrets set WITHDRAWAL_INTEGRATION_ENABLED="true"
+supabase secrets set WITHDRAWAL_INTEGRATION_ENABLED="false"
 
 # Optional: Logging & Monitoring
 supabase secrets set LOG_LEVEL="info"
@@ -135,7 +165,7 @@ supabase db status
 ```bash
 # Deploy all functions
 supabase functions deploy payment-api
-supabase functions deploy webhook-handler  
+supabase functions deploy webhook-handler
 supabase functions deploy api-health
 
 # Or deploy all at once
@@ -210,6 +240,28 @@ supabase dashboard db
 
 ### Payment API
 
+#### Request Structure
+
+The Payment Manager API supports the following request structure:
+
+**Required Fields:**
+
+- `display.intent`: Payment description/intent
+- `preferredChain`: Chain ID for payment processing
+- `preferredToken`: Token symbol (e.g., "USDC", "USDC_XLM", "XLM")
+- `destination.destinationAddress`: Address for withdrawal
+- `destination.chainId`: Chain ID for withdrawal
+- `destination.amountUnits`: Amount for withdrawal
+
+**Optional Fields:**
+
+- `preferredTokenAddress`: Explicit token address (overrides automatic mapping)
+- `destination.tokenAddress`: Token address for withdrawal
+- `destination.tokenSymbol`: Token symbol for withdrawal
+- `metadata`: Additional payment metadata
+- `metadata.webhookUrl`: Custom webhook URL
+- `metadata.externalId`: External reference ID
+
 #### Create Payment
 
 ```bash
@@ -221,17 +273,50 @@ Content-Type: application/json
     "intent": "Coffee purchase",
     "currency": "USD"
   },
-  "preferredChain": "8453",
-  "preferredToken": "USDC",
+  "preferredChain": "1500",
+  "preferredToken": "USDC_XLM",
+  "preferredTokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
   "destination": {
-    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
-    "chainId": "10001",
-    "amountUnits": "5500000",
+    "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
+    "chainId": "1500",
+    "amountUnits": "0.01",
     "tokenSymbol": "USDC_XLM",
-    "tokenAddress": "0xA0b86a33E6441c8C06DD2a8e8B4A6a0b0b1b1b1b"
+    "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "metadata": {
-    "orderId": "12345"
+    "orderId": "12345",
+    "webhookUrl": "https://your-app.com/webhooks/payment"
+  }
+}
+```
+
+#### Payment Manager Example (Stellar USDC)
+
+```bash
+POST /functions/v1/payment-api
+Content-Type: application/json
+
+{
+  "display": {
+    "intent": "Premium Subscription Payment",
+    "currency": "USD"
+  },
+  "preferredChain": "1500",
+  "preferredToken": "USDC_XLM",
+  "preferredTokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  "destination": {
+    "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
+    "chainId": "1500",
+    "amountUnits": "0.01",
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  },
+  "metadata": {
+    "orderId": "subscription_2024_001",
+    "userId": "user_12345",
+    "planType": "premium",
+    "billingCycle": "monthly",
+    "email": "user@example.com"
   }
 }
 ```
@@ -244,23 +329,50 @@ Content-Type: application/json
 
 {
   "display": {
-    "intent": "Premium Subscription Payment",
+    "intent": "NFT Purchase",
     "currency": "USD"
   },
-  "preferredChain": "10002",
+  "preferredChain": "900",
   "preferredToken": "USDC",
+  "preferredTokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   "destination": {
-    "destinationAddress": "0x742d35cc6ab4925a59b2a6923e87e11d2a1e3b1f",
-    "chainId": "11155111",
-    "amountUnits": "25000000",
-    "tokenSymbol": "USDC"
+    "destinationAddress": "BNnbbcbi8yMbft9i58KBpkXyXb5jUqkQ71bmii5aL8dC",
+    "chainId": "900",
+    "amountUnits": "25.00",
+    "tokenSymbol": "USDC",
+    "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
   },
   "metadata": {
-    "orderId": "subscription_2024_001",
-    "userId": "user_12345",
-    "planType": "premium",
-    "billingCycle": "monthly",
-    "email": "user@example.com"
+    "orderId": "nft_purchase_001",
+    "nftId": "nft_12345"
+  }
+}
+```
+
+#### Payment Manager Example (Ethereum USDC)
+
+```bash
+POST /functions/v1/payment-api
+Content-Type: application/json
+
+{
+  "display": {
+    "intent": "DeFi Protocol Payment",
+    "currency": "USD"
+  },
+  "preferredChain": "1",
+  "preferredToken": "USDC",
+  "preferredTokenAddress": "0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C",
+  "destination": {
+    "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+    "chainId": "1",
+    "amountUnits": "1000000",
+    "tokenSymbol": "USDC",
+    "tokenAddress": "0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C"
+  },
+  "metadata": {
+    "orderId": "defi_payment_001",
+    "protocol": "uniswap"
   }
 }
 ```
@@ -318,23 +430,31 @@ POST /functions/v1/webhook-handler?provider=payment-manager&token=your-webhook-t
 Content-Type: application/json
 
 {
-  "event": "UPDATE",
-  "timestamp": "2024-01-15T10:35:00Z",
+  "id": "5941be78-9442-479f-8af7-db74368a05dc",
+  "url": "http://aoqfamebfrwdrqxevngc.supabase.co/checkout?id=5941be78-9442-479f-8af7-db74368a05dc",
   "payment": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "status": "payment_completed",
-    "externalId": "order-123",
-    "createdAt": "2024-01-15T10:30:00Z",
-    "updatedAt": "2024-01-15T10:35:00Z",
-    "completedAt": "2024-01-15T10:35:00Z",
-    "display": { ... },
-    "source": { ... },
-    "destination": { ... },
-    "metadata": { ... },
-    "payerAddress": "0x1234...5678",
-    "transactionHash": "0xabc...def"
-  },
-  "previousStatus": "payment_started"
+    "id": "5941be78-9442-479f-8af7-db74368a05dc",
+    "status": "payment_unpaid",
+    "createdAt": "2025-08-14T05:17:29.583+00:00",
+    "receivingAddress": "GDHXR2VIJIGMHSNCPJ747EYCNFFFVCTSZWJDSG3YGUXS6A4B2YE3WMZZ",
+    "memo": "0060595",
+    "display": {
+      "name": "Stellar Mainnet USDC Test",
+      "description": "Testing USDC payment on Stellar mainnet",
+      "logoUrl": "https://example.com/logo.png"
+    },
+    "source": null,
+    "payinchainid": "1500",
+    "payintokenaddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    "destination": {
+      "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
+      "amountUnits": "0.01",
+      "chainId": "1500",
+      "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+    },
+    "externalId": null,
+    "metadata": null
+  }
 }
 ```
 
@@ -355,7 +475,7 @@ GET /functions/v1/api-health
       "lastCheck": "2024-01-01T00:00:00.000Z"
     },
     "aqua": {
-      "status": "healthy", 
+      "status": "healthy",
       "responseTime": 200,
       "lastCheck": "2024-01-01T00:00:00.000Z"
     }
@@ -397,7 +517,7 @@ CREATE TABLE payments (
 ```sql
 CREATE TYPE payment_status AS ENUM (
   'payment_unpaid',
-  'payment_started', 
+  'payment_started',
   'payment_completed',
   'payment_bounced',
   'payment_refunded'
@@ -617,7 +737,7 @@ for details.
 # Complete deployment in one go
 git clone <repo> && cd payment-api-proxy
 supabase init && supabase link --project-ref <your-ref>
-supabase secrets set DAIMO_API_KEY="your-key" AQUA_API_TOKEN="your-token"
+supabase secrets set PAYMENT_MANAGER_API_KEY="your-key" PAYMENT_MANAGER_WEBHOOK_TOKEN="your-token"
 supabase db push && supabase functions deploy
 curl https://<your-ref>.supabase.co/functions/v1/api-health
 ```
@@ -627,13 +747,66 @@ automatic withdrawal integration! 🎉
 
 **Payment Routing (preferredChain)**:
 
-| Chain    | ID      | Provider        | Supported Tokens        | Use Case           |
-| -------- | ------- | --------------- | ----------------------- | ------------------ |
-| Ethereum | `1`     | Daimo           | ETH, USDC, USDT, etc.   | EVM payments       |
-| Optimism | `10`    | Daimo           | ETH, USDC, USDT, etc.   | L2 payments        |
-| Polygon  | `137`   | Daimo           | MATIC, USDC, USDT, etc. | Low-cost payments  |
-| Arbitrum | `42161` | Daimo           | ETH, USDC, USDT, etc.   | L2 payments        |
-| Base     | `8453`  | Daimo           | ETH, USDC, USDT, etc.   | Coinbase ecosystem |
-| BSC      | `56`    | Daimo           | BNB, USDC, USDT, etc.   | BSC ecosystem      |
-| Stellar  | `10001` | Aqua            | XLM, USDC_XLM           | Stellar ecosystem  |
-| Solana   | `10002` | Payment Manager | USDC                    | Solana ecosystem   |
+| Chain           | ID         | Provider        | Supported Tokens        | Token Addresses                                                       | Use Case           |
+| --------------- | ---------- | --------------- | ----------------------- | --------------------------------------------------------------------- | ------------------ |
+| Ethereum        | `1`        | Payment Manager | ETH, USDC, USDT, etc.   | USDC: `0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C`                    | EVM payments       |
+| Sepolia         | `11155111` | Payment Manager | ETH, USDC, USDT, etc.   | USDC: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`                    | Ethereum testnet   |
+| Optimism        | `10`       | Payment Manager | ETH, USDC, USDT, etc.   | USDC: `0x7F5c764cBc14f9669B88837ca1490cCa17c31607`                    | L2 payments        |
+| Polygon         | `137`      | Payment Manager | MATIC, USDC, USDT, etc. | USDC: `0x83ACD773450269b6c141F830192fd07748c0a8b1`                    | Low-cost payments  |
+| Mumbai          | `80001`    | Payment Manager | MATIC, USDC, USDT, etc. | USDC: `0xe6b8a5CF854791412c1f6EFC7CAf629f5Df1c747`                    | Polygon testnet    |
+| Arbitrum        | `42161`    | Payment Manager | ETH, USDC, USDT, etc.   | USDC: `0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8`                    | L2 payments        |
+| Base            | `8453`     | Payment Manager | ETH, USDC, USDT, etc.   | USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`                    | Coinbase ecosystem |
+| BSC             | `56`       | Payment Manager | BNB, USDC, USDT, etc.   | USDC: `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d`                    | BSC ecosystem      |
+| Stellar         | `1500`     | Payment Manager | XLM, USDC_XLM           | USDC: `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` | Stellar ecosystem  |
+| Stellar Testnet | `1501`     | Payment Manager | XLM, USDC_XLM           | USDC: `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` | Stellar testnet    |
+| Solana          | `900`      | Payment Manager | USDC                    | USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`                  | Solana ecosystem   |
+| Solana Devnet   | `901`      | Payment Manager | USDC                    | USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`                  | Solana testnet     |
+
+_Note: All chains are currently routed to Payment Manager. See [PROVIDER_SWITCHING.md](./PROVIDER_SWITCHING.md) to switch to alternative providers._
+
+---
+
+## ✅ Transaction Verification - August 18th, 2024
+
+The following transactions have been successfully verified and tested on the Payment Manager integration:
+
+### 1. Stellar (with memo) → Base
+
+**Stellar payin (memo) and base payout - working**
+
+- **Payin Transaction**: [StellarExpert | Stellar XLM block explorer and analytics platform](https://stellar.expert)
+- **Payout Transaction**: [https://basescan.org/tx/0xbe5c38dde8235a9cf007df7e7553eddc46588658432ef4b66fa9dbc6ccee9f98](https://basescan.org/tx/0xbe5c38dde8235a9cf007df7e7553eddc46588658432ef4b66fa9dbc6ccee9f98)
+
+### 2. Base → Stellar
+
+**Base payin and stellar payout - working**
+
+- **Order ID**: `0aeb1da6-cbfa-4b4f-b17b-76f0d9d1a1c3`
+- **Payin Transaction**: [https://basescan.org/tx/0x51d8606daf59573c150847e851f489ebe97bb77a0ad649b0f87218bfe7341280](https://basescan.org/tx/0x51d8606daf59573c150847e851f489ebe97bb77a0ad649b0f87218bfe7341280)
+- **Payout Transaction**: [StellarExpert | Stellar XLM block explorer and analytics platform](https://stellar.expert)
+
+### 3. Solana (with memo) → Base
+
+**Solana pay in and base payout - working**
+
+- **Order ID**: `54540054-4b74-424c-bd16-1139e63a4170`
+- **Payin Transaction**: `3AH3TbBmKVic9N488M5pPJveVo6CWuDwq8V1JLFrUEm4u6qe6xC5rhSc7SXV28obdC3jLBXVBo6Q3zf97rvFMh9u`
+- **Payout Transaction**: [https://basescan.org/tx/0xe14b2618467444174b1b1363762f6446a7d4a757b1c8b8c15433374be0f7ba72](https://basescan.org/tx/0xe14b2618467444174b1b1363762f6446a7d4a757b1c8b8c15433374be0f7ba72)
+
+### 4. Polygon → Base
+
+**Polygon pay in and base payout - working**
+
+- **Order ID**: `54540054-4b74-424c-bd16-1139e63a4170`
+- **Payin Transaction**: [https://polygonscan.com/tx/0x682480482aa2b831a82a8a39e5bb8a8bc82629cd02308255f1bfbc134b8077e7](https://polygonscan.com/tx/0x682480482aa2b831a82a8a39e5bb8a8bc82629cd02308255f1bfbc134b8077e7)
+- **Payout Transaction**: [https://basescan.org/tx/0x8a2da4d58b3012f2e9e7548b7a4f62ea8b1ae7247eb3d38428023993575e2377](https://basescan.org/tx/0x8a2da4d58b3012f2e9e7548b7a4f62ea8b1ae7247eb3d38428023993575e2377)
+
+### 5. Polygon → Stellar
+
+**Polygon pay in and stellar payout - working**
+
+- **Order ID**: `4c88e53c-3852-4296-afe9-ba54d64b9ce2`
+- **Payin Transaction**: [https://polygonscan.com/tx/0xd165ce6b7bb6812070ce77434849e2670f6a1f809b8beffbae5815f2db50d2f1](https://polygonscan.com/tx/0xd165ce6b7bb6812070ce77434849e2670f6a1f809b8beffbae5815f2db50d2f1)
+- **Payout Transaction**: [StellarExpert | Stellar XLM block explorer and analytics platform](https://stellar.expert)
+
+---

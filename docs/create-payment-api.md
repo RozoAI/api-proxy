@@ -10,14 +10,15 @@ POST /functions/v1/payment-api
 
 ## Overview
 
-The Create Payment API allows you to create payment requests that are automatically routed to the appropriate blockchain provider (Daimo or Aqua) based on the specified `preferredChain`. The API supports cross-chain payment processing with automatic withdrawal integration, including special handling for USDC_XLM tokens that converts Base USDC payments to Stellar XLM withdrawals.
+The Create Payment API allows you to create payment requests that are automatically routed to the Payment Manager provider. The API supports multi-chain payment processing across Ethereum, Solana, Stellar, Polygon, and other blockchain networks with automatic token address mapping and optional token address overrides.
 
 ## Key Features
 
-- **Multi-Provider Routing**: Automatically routes to Daimo (EVM chains) or Aqua (Stellar) based on `preferredChain`
-- **USDC_XLM Conversion**: Converts USDC_XLM requests to Base USDC payments with Stellar XLM withdrawal
-- **Withdrawal Integration**: Automatically triggers withdrawals to destination addresses after successful payment
-- **Unified Response Format**: Consistent response format across all providers
+- **Single Provider**: All payments are routed to Payment Manager
+- **Multi-Chain Support**: Supports Ethereum, Solana, Stellar, Polygon, Base, and other chains
+- **Token Mapping**: Automatic token address mapping with override capability
+- **Unified Response Format**: Consistent response format across all chains
+- **No Withdrawal Integration**: Payment Manager handles payments without automatic withdrawal
 
 ## Request Format
 
@@ -36,11 +37,12 @@ Authorization: Bearer YOUR_SUPABASE_ANON_KEY
     intent: string;           // Human-readable payment description
     currency: string;         // Currency code (e.g., "USD", "EUR")
   };
-  preferredChain: string;     // Chain ID for payment routing (determines provider)
+  preferredChain: string;     // Chain ID for payment routing
   preferredToken: string;     // Preferred token for payment processing
+  preferredTokenAddress?: string; // Optional: Explicit token address (overrides automatic mapping)
   destination: {
-    destinationAddress: string;  // Final recipient address (for withdrawal)
-    chainId: string;            // Destination chain ID (for withdrawal)
+    destinationAddress: string;  // Final recipient address
+    chainId: string;            // Destination chain ID
     amountUnits: string;        // Payment amount (must be > 0)
     tokenSymbol?: string;       // Destination token symbol
     tokenAddress?: string;      // Destination token contract address
@@ -51,64 +53,58 @@ Authorization: Bearer YOUR_SUPABASE_ANON_KEY
 
 ### Field Descriptions
 
-| Field | Type | Required | Description | Example |
-|-------|------|----------|-------------|---------|
-| `display.intent` | string | ✅ | Human-readable payment description | "Coffee purchase" |
-| `display.currency` | string | ✅ | Currency code | "USD", "EUR" |
-| `preferredChain` | string | ✅ | Chain ID for payment processing | "10", "10001" |
-| `preferredToken` | string | ✅ | Token to use for payment | "USDC", "XLM" |
-| `destination.destinationAddress` | string | ✅ | Final recipient address | "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP" |
-| `destination.chainId` | string | ✅ | Destination chain ID | "10001", "8453" |
-| `destination.amountUnits` | string | ✅ | Payment amount | "5000000" (microunits) |
-| `destination.tokenSymbol` | string | ❌ | Destination token symbol | "USDC_XLM", "XLM", "USDC" |
-| `destination.tokenAddress` | string | ❌ | Destination token contract address | "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" |
-| `metadata` | object | ❌ | Additional payment metadata | `{"orderId": "12345"}` |
+| Field                            | Type   | Required | Description                                          | Example                                                         |
+| -------------------------------- | ------ | -------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| `display.intent`                 | string | ✅       | Human-readable payment description                   | "Coffee purchase"                                               |
+| `display.currency`               | string | ✅       | Currency code                                        | "USD", "EUR"                                                    |
+| `preferredChain`                 | string | ✅       | Chain ID for payment processing                      | "1500", "900", "1"                                              |
+| `preferredToken`                 | string | ✅       | Token to use for payment                             | "USDC", "USDC_XLM", "XLM"                                       |
+| `preferredTokenAddress`          | string | ❌       | Explicit token address (overrides automatic mapping) | "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" |
+| `destination.destinationAddress` | string | ✅       | Final recipient address                              | "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU"      |
+| `destination.chainId`            | string | ✅       | Destination chain ID                                 | "1500", "900", "1"                                              |
+| `destination.amountUnits`        | string | ✅       | Payment amount                                       | "0.01" (decimal format)                                         |
+| `destination.tokenSymbol`        | string | ❌       | Destination token symbol                             | "USDC_XLM", "XLM", "USDC"                                       |
+| `destination.tokenAddress`       | string | ❌       | Destination token contract address                   | "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" |
+| `metadata`                       | object | ❌       | Additional payment metadata                          | `{"orderId": "12345"}`                                          |
+| `metadata.webhookUrl`            | string | ❌       | Custom webhook URL for payment notifications         | `"https://your-app.com/webhooks/payment"`                       |
+| `metadata.externalId`            | string | ❌       | External reference ID for the payment                | `"ext_123"`                                                     |
 
 ## Payment Routing Logic
 
-### Daimo Provider (EVM Chains)
-Routes when `preferredChain` is an EVM chain ID:
+### Payment Manager Provider (All Chains)
 
-| Chain ID | Name | Supported Tokens |
-|----------|------|------------------|
-| `1` | Ethereum | ETH, USDC, USDT, etc. |
-| `10` | Optimism | ETH, USDC, USDT, etc. |
-| `137` | Polygon | MATIC, USDC, USDT, etc. |
-| `42161` | Arbitrum | ETH, USDC, USDT, etc. |
-| `8453` | Base | ETH, USDC, USDT, etc. |
+All payments are routed to Payment Manager regardless of chain ID:
 
-### Aqua Provider (Stellar)
-Routes when `preferredChain` is `"10001"`:
+| Chain ID   | Name            | Supported Tokens        | Token Addresses                                                       |
+| ---------- | --------------- | ----------------------- | --------------------------------------------------------------------- |
+| `1`        | Ethereum        | ETH, USDC, USDT, etc.   | USDC: `0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8C`                  |
+| `11155111` | Sepolia         | ETH, USDC, USDT, etc.   | USDC: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`                    |
+| `10`       | Optimism        | ETH, USDC, USDT, etc.   | USDC: `0x7F5c764cBc14f9669B88837ca1490cCa17c31607`                    |
+| `137`      | Polygon         | MATIC, USDC, USDT, etc. | USDC: `0x83ACD773450269b6c141F830192fd07748c0a8b1`                    |
+| `80001`    | Mumbai          | MATIC, USDC, USDT, etc. | USDC: `0xe6b8a5CF854791412c1f6EFC7CAf629f5Df1c747`                    |
+| `42161`    | Arbitrum        | ETH, USDC, USDT, etc.   | USDC: `0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8`                    |
+| `8453`     | Base            | ETH, USDC, USDT, etc.   | USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`                    |
+| `56`       | BSC             | BNB, USDC, USDT, etc.   | USDC: `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d`                    |
+| `1500`     | Stellar         | XLM, USDC_XLM           | USDC: `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
+| `1501`     | Stellar Testnet | XLM, USDC_XLM           | USDC: `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
+| `900`      | Solana          | USDC                    | USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`                  |
+| `901`      | Solana Devnet   | USDC                    | USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`                  |
 
-| Chain ID | Name | Supported Tokens |
-|----------|------|------------------|
-| `10001` | Stellar | XLM, USDC_XLM |
+## Token Address Mapping
 
-## Special Handling: USDC_XLM Conversion
+The system automatically maps token symbols to their corresponding addresses based on the chain. You can override this behavior by providing the `preferredTokenAddress` field.
 
-When `destination.tokenSymbol` is `"USDC_XLM"`, the system performs a two-stage process:
+### Automatic Token Mapping
 
-### Stage 1: Payment Processing (via Daimo)
-- Converts destination to USDC Base address from `USDC_BASE_ADDRESS` environment variable
-- Processes payment as USDC on Base chain (Chain ID: 8453)
-- Stores original Stellar destination in metadata
+- **Stellar (1500, 1501)**:
+  - `XLM` → `XLM`
+  - `USDC_XLM` or `USDC` → `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`
 
-### Stage 2: Withdrawal (via Webhook)
-- Upon successful payment completion, webhook handler detects USDC_XLM conversion
-- Calls withdrawal API to convert Base USDC to Stellar XLM
-- Sends to original Stellar destination address
+- **Solana (900, 901)**:
+  - `USDC` → `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 
-```mermaid
-graph TD
-    A[USDC_XLM Request] --> B[Route to Daimo]
-    B --> C[Convert to Base USDC Address]
-    C --> D[Process Payment on Base]
-    D --> E[Payment Success Webhook]
-    E --> F[Detect USDC_XLM Conversion]
-    F --> G[Call Withdrawal API]
-    G --> H[Convert to Stellar XLM]
-    H --> I[Send to Original Stellar Address]
-```
+- **EVM Chains (1, 10, 137, etc.)**:
+  - `USDC` → Chain-specific USDC address (see table above)
 
 ## Response Format
 
@@ -116,30 +112,32 @@ graph TD
 
 ```json
 {
-  "id": "payment_abc123",
+  "id": "5941be78-9442-479f-8af7-db74368a05dc",
   "status": "payment_unpaid",
-  "createdAt": "1703123456",
+  "createdAt": "2025-08-14T05:17:29.583+00:00",
   "display": {
-    "intent": "USDC_XLM Payment",
+    "intent": "Stellar USDC Payment",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
     "txHash": null,
-    "chainId": "8453",
-    "amountUnits": "5000000",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    "chainId": "1500",
+    "amountUnits": "0.01",
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "externalId": "ext_123",
   "metadata": {
-    "preferred_chain": "10",
-    "preferred_token": "USDC",
-    "is_usdc_xlm_conversion": "true",
-    "withdrawal_destination": "{\"address\":\"GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP\",\"chainId\":\"10001\",\"tokenSymbol\":\"USDC_XLM\",\"isUSDCXLM\":true}"
+    "orderId": "12345",
+    "provider": "payment-manager",
+    "preferred_chain": "1500",
+    "preferred_token": "USDC_XLM",
+    "payinchainid": "1500",
+    "payintokenaddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
-  "url": "https://pay.daimo.com/payment/payment_abc123"
+  "url": "http://aoqfamebfrwdrqxevngc.supabase.co/checkout?id=5941be78-9442-479f-8af7-db74368a05dc"
 }
 ```
 
@@ -153,135 +151,125 @@ graph TD
 
 ## Examples
 
-### Example 1: USDC_XLM Payment (Optimism → Base → Stellar)
+### Example 1: Stellar USDC Payment
 
 **Request:**
+
 ```bash
 curl -X POST "http://localhost:54321/functions/v1/payment-api" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY" \
   -d '{
     "display": {
-      "intent": "Cross-chain payment to Stellar",
+      "intent": "Stellar USDC payment",
       "currency": "USD"
     },
-    "preferredChain": "10",
-    "preferredToken": "USDC",
+    "preferredChain": "1500",
+    "preferredToken": "USDC_XLM",
+    "preferredTokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
     "destination": {
-      "destinationAddress": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-      "chainId": "10001",
-      "amountUnits": "5000000",
-      "tokenSymbol": "USDC_XLM"
+      "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
+      "chainId": "1500",
+      "amountUnits": "0.01",
+      "tokenSymbol": "USDC_XLM",
+      "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     },
     "metadata": {
-      "orderId": "order_12345"
+      "orderId": "order_12345",
+      "webhookUrl": "https://your-app.com/webhooks/payment"
     }
   }'
 ```
 
 **Response:**
+
 ```json
 {
-  "id": "daimo_payment_1703123456",
+  "id": "5941be78-9442-479f-8af7-db74368a05dc",
   "status": "payment_unpaid",
-  "createdAt": "1703123456000",
+  "createdAt": "2025-08-14T05:17:29.583+00:00",
   "display": {
-    "intent": "Cross-chain payment to Stellar",
+    "intent": "Stellar USDC payment",
     "currency": "USD"
   },
   "source": null,
   "destination": {
-    "destinationAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
     "txHash": null,
-    "chainId": "8453",
-    "amountUnits": "5000000",
-    "tokenSymbol": "USDC",
-    "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    "chainId": "1500",
+    "amountUnits": "0.01",
+    "tokenSymbol": "USDC_XLM",
+    "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
-  "externalId": "daimo_ext_123",
+  "externalId": "ext_123",
   "metadata": {
     "orderId": "order_12345",
-    "preferred_chain": "10",
-    "preferred_token": "USDC",
-    "is_usdc_xlm_conversion": "true",
-    "withdrawal_destination": "{\"address\":\"GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP\",\"chainId\":\"10001\",\"tokenSymbol\":\"USDC_XLM\",\"isUSDCXLM\":true}"
+    "provider": "payment-manager",
+    "preferred_chain": "1500",
+    "preferred_token": "USDC_XLM",
+    "payinchainid": "1500",
+    "payintokenaddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
-  "url": "https://pay.daimo.com/payment/daimo_payment_1703123456"
+  "url": "http://aoqfamebfrwdrqxevngc.supabase.co/checkout?id=5941be78-9442-479f-8af7-db74368a05dc"
 }
 ```
 
-### Example 2: Direct Stellar Payment (Aqua)
+### Example 2: Solana USDC Payment
 
 **Request:**
+
 ```bash
 curl -X POST "http://localhost:54321/functions/v1/payment-api" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY" \
   -d '{
     "display": {
-      "intent": "Direct Stellar XLM payment",
+      "intent": "Solana USDC payment",
       "currency": "USD"
     },
-    "preferredChain": "10001",
-    "preferredToken": "XLM",
+    "preferredChain": "900",
+    "preferredToken": "USDC",
+    "preferredTokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     "destination": {
-      "destinationAddress": "GCKFBEIYTKP6RCZNVPH73XL7XFWTEOAO7MZLU4BGBMFDVBEADFQZJJPD",
-      "chainId": "10001",
-      "amountUnits": "10000000",
-      "tokenSymbol": "XLM"
+      "destinationAddress": "BNnbbcbi8yMbft9i58KBpkXyXb5jUqkQ71bmii5aL8dC",
+      "chainId": "900",
+      "amountUnits": "25.00",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    },
+    "metadata": {
+      "orderId": "nft_001",
+      "nftId": "nft_12345"
     }
   }'
 ```
 
-**Response:**
-```json
-{
-  "id": "aqua_invoice_1703123456",
-  "status": "payment_unpaid",
-  "createdAt": "1703123456000",
-  "display": {
-    "intent": "Direct Stellar XLM payment",
-    "currency": "USD"
-  },
-  "source": null,
-  "destination": {
-    "destinationAddress": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-    "txHash": null,
-    "chainId": "10001",
-    "amountUnits": "10000000",
-    "tokenSymbol": "XLM",
-    "tokenAddress": ""
-  },
-  "externalId": "aqua_invoice_1703123456",
-  "metadata": {
-    "preferred_chain": "10001",
-    "preferred_token": "XLM",
-    "aqua_invoice_id": "aqua_invoice_1703123456"
-  },
-  "url": "https://api.aqua.network/checkout?id=aqua_invoice_1703123456"
-}
-```
-
-### Example 3: Regular EVM Payment (Optimism)
+### Example 3: Ethereum USDC Payment
 
 **Request:**
+
 ```bash
 curl -X POST "http://localhost:54321/functions/v1/payment-api" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY" \
   -d '{
     "display": {
-      "intent": "Regular USDC payment on Optimism",
+      "intent": "Ethereum USDC payment",
       "currency": "USD"
     },
-    "preferredChain": "10",
+    "preferredChain": "1",
     "preferredToken": "USDC",
+    "preferredTokenAddress": "0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8C",
     "destination": {
-      "destinationAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-      "chainId": "10",
-      "amountUnits": "5000000",
-      "tokenAddress": "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
-      "tokenSymbol": "USDC"
+      "destinationAddress": "0x742d35Cc6634C0532925a3b8D6Cd1C3b5123456",
+      "chainId": "1",
+      "amountUnits": "1000000",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8C"
+    },
+    "metadata": {
+      "orderId": "defi_001",
+      "protocol": "uniswap"
     }
   }'
 ```
@@ -306,7 +294,7 @@ curl -X POST "http://localhost:54321/functions/v1/payment-api" \
 ```json
 {
   "error": "Payment creation failed",
-  "message": "Daimo API error 500: {\"error\":\"Failed to generate order. TRPCClientError: UNAUTHORIZED\"}"
+  "message": "Payment Manager API error 500: Failed to create payment"
 }
 ```
 
@@ -319,44 +307,52 @@ curl -X POST "http://localhost:54321/functions/v1/payment-api" \
 SUPABASE_URL=your-supabase-url
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Daimo Configuration
-DAIMO_BASE_URL=https://pay.daimo.com
-DAIMO_API_KEY=your-daimo-api-key
+# Payment Manager Configuration
+PAYMENT_MANAGER_BASE_URL=https://rozo-payment-manager.example.com
+PAYMENT_MANAGER_API_KEY=your-payment-manager-api-key
+PAYMENT_MANAGER_WEBHOOK_TOKEN=your-payment-manager-webhook-token
 
-# Aqua Configuration  
-AQUA_BASE_URL=https://api.aqua.network
-AQUA_API_TOKEN=your-aqua-api-token
-AQUA_XLM_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-AQUA_USDC_XLM_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-# USDC_XLM Conversion
-USDC_BASE_ADDRESS=0xA0b86a33E6411e3036C4E602F654bA16f98Cc9d1
-
-# Withdrawal Integration
-WITHDRAWAL_API_BASE_URL=your-withdrawal-api-url
-WITHDRAWAL_API_TOKEN=your-withdrawal-api-token
-WITHDRAWAL_INTEGRATION_ENABLED=true
+# CORS Configuration
+CORS_ORIGINS=https://your-app.com,https://yourdomain.com
 ```
 
 ## Webhook Integration
 
-Upon successful payment completion, the system automatically:
+Upon payment status changes, the Payment Manager sends webhooks to notify about payment updates:
 
-1. **Receives webhook** from payment provider (Daimo/Aqua)
+1. **Receives webhook** from Payment Manager
 2. **Updates payment status** in database
-3. **Checks for USDC_XLM conversion** in metadata
-4. **Triggers withdrawal** if conversion is detected
+3. **Processes payment metadata** (receiving address, memo, etc.)
 
-### USDC_XLM Withdrawal Payload
+### Payment Manager Webhook Structure
 
 ```json
 {
-  "amount": "5.00",
-  "to_address": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-  "chain": "stellar",
-  "token": "XLM",
-  "original_payment_id": "daimo_payment_1703123456",
-  "conversion_type": "usdc_base_to_xlm_stellar"
+  "id": "5941be78-9442-479f-8af7-db74368a05dc",
+  "url": "http://aoqfamebfrwdrqxevngc.supabase.co/checkout?id=5941be78-9442-479f-8af7-db74368a05dc",
+  "payment": {
+    "id": "5941be78-9442-479f-8af7-db74368a05dc",
+    "status": "payment_completed",
+    "createdAt": "2025-08-14T05:17:29.583+00:00",
+    "receivingAddress": "GDHXR2VIJIGMHSNCPJ747EYCNFFFVCTSZWJDSG3YGUXS6A4B2YE3WMZZ",
+    "memo": "0060595",
+    "display": {
+      "name": "Stellar Mainnet USDC Test",
+      "description": "Testing USDC payment on Stellar mainnet",
+      "logoUrl": "https://example.com/logo.png"
+    },
+    "source": null,
+    "payinchainid": "1500",
+    "payintokenaddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    "destination": {
+      "destinationAddress": "GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU",
+      "amountUnits": "0.01",
+      "chainId": "1500",
+      "tokenAddress": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+    },
+    "externalId": null,
+    "metadata": null
+  }
 }
 ```
 
@@ -372,6 +368,7 @@ interface CreatePaymentRequest {
   };
   preferredChain: string;
   preferredToken: string;
+  preferredTokenAddress?: string;
   destination: {
     destinationAddress: string;
     chainId: string;
@@ -387,7 +384,7 @@ async function createPayment(paymentData: CreatePaymentRequest) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer YOUR_SUPABASE_ANON_KEY',
+      Authorization: 'Bearer YOUR_SUPABASE_ANON_KEY',
     },
     body: JSON.stringify(paymentData),
   });
@@ -400,34 +397,61 @@ async function createPayment(paymentData: CreatePaymentRequest) {
   return response.json();
 }
 
-// USDC_XLM Payment Example
-const usdcXlmPayment = await createPayment({
+// Stellar USDC Payment Example
+const stellarPayment = await createPayment({
   display: {
-    intent: "Cross-chain payment to Stellar",
-    currency: "USD"
+    intent: 'Stellar USDC payment',
+    currency: 'USD',
   },
-  preferredChain: "10", // Optimism
-  preferredToken: "USDC",
+  preferredChain: '1500', // Stellar
+  preferredToken: 'USDC_XLM',
+  preferredTokenAddress: 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   destination: {
-    destinationAddress: "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-    chainId: "10001", // Stellar
-    amountUnits: "5000000", // 5 USDC in microunits
-    tokenSymbol: "USDC_XLM"
+    destinationAddress: 'GDFLZTLVMLR3OVO4VSODYB7SGVIOI2AS652WODBCGBUQAMKQL6O3QYPU',
+    chainId: '1500', // Stellar
+    amountUnits: '0.01', // 0.01 USDC
+    tokenSymbol: 'USDC_XLM',
+    tokenAddress: 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   metadata: {
-    orderId: "order_12345"
-  }
+    orderId: 'order_12345',
+    webhookUrl: 'https://your-app.com/webhooks/payment',
+  },
+});
+
+// Solana USDC Payment Example
+const solanaPayment = await createPayment({
+  display: {
+    intent: 'Solana USDC payment',
+    currency: 'USD',
+  },
+  preferredChain: '900', // Solana
+  preferredToken: 'USDC',
+  preferredTokenAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  destination: {
+    destinationAddress: 'BNnbbcbi8yMbft9i58KBpkXyXb5jUqkQ71bmii5aL8dC',
+    chainId: '900', // Solana
+    amountUnits: '25.00', // 25 USDC
+    tokenSymbol: 'USDC',
+    tokenAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  },
+  metadata: {
+    orderId: 'nft_001',
+    nftId: 'nft_12345',
+  },
 });
 ```
 
 ## Best Practices
 
-1. **Use USDC_XLM for cross-chain payments** from EVM to Stellar
+1. **Use appropriate chain IDs** for your target blockchain
 2. **Include meaningful metadata** for tracking and debugging
 3. **Handle webhook notifications** for payment status updates
 4. **Implement proper error handling** for provider failures
-5. **Store payment IDs** for future reference and withdrawal tracking
-6. **Use appropriate amount units** (typically microunits for precision)
+5. **Store payment IDs** for future reference
+6. **Use decimal format for amounts** (e.g., "0.01" instead of microunits)
+7. **Provide explicit token addresses** when needed for custom tokens
+8. **Include webhook URLs** in metadata for payment notifications
 
 ## Rate Limiting
 
@@ -440,4 +464,4 @@ const usdcXlmPayment = await createPayment({
 - [Get Payment by ID](./get-payment-api.md)
 - [Get Payment by External ID](./get-payment-external-api.md)
 - [Webhook Handler](./webhook-handler-api.md)
-- [Health Check](./health-check-api.md) 
+- [Health Check](./health-check-api.md)
