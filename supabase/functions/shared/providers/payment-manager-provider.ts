@@ -107,13 +107,14 @@ export class PaymentManagerProvider extends BaseProvider {
         logoUrl: paymentData.metadata?.logoUrl || 'https://example.com/logo.png',
       },
       payinchainid: this.mapChainIdToPaymentManagerFormat(preferredChainId),
-      payintokenaddress: this.mapTokenToPaymentManagerFormat(
-        paymentData.preferredToken,
-        preferredChainId
-      ),
+      payintokenaddress:
+        paymentData.preferredTokenAddress ||
+        this.mapTokenToPaymentManagerFormat(paymentData.preferredToken, preferredChainId),
       destination: {
         destinationAddress: paymentData.destination.destinationAddress,
         amountUnits: this.formatPaymentValue(paymentData.destination.amountUnits),
+        chainId: paymentData.destination.chainId,
+        tokenAddress: paymentData.destination.tokenAddress,
       },
       externalId: paymentData.metadata?.externalId,
       metadata: {
@@ -218,18 +219,18 @@ export class PaymentManagerProvider extends BaseProvider {
     if (chainId === 1500 || chainId === 1501) {
       // Stellar tokens (Mainnet and Testnet)
       if (token === 'XLM') return 'XLM';
-      if (token === 'USDC_XLM')
+      if (token === 'USDC_XLM' || token === 'USDC')
         return 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
     } else if (chainId === 900 || chainId === 901) {
       // Solana tokens (Mainnet and Devnet)
-      if (token === 'USDC') return 'USDC:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      if (token === 'USDC') return 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
     } else {
       // EVM tokens
       if (token === 'USDC') {
         const usdcAddresses: Record<number, string> = {
           1: '0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C', // Ethereum USDC
           10: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', // Optimism USDC
-          137: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon USDC
+          137: '0x83ACD773450269b6c141F830192fd07748c0a8b1', // Polygon USDC
           42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', // Arbitrum USDC
           8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base USDC
           56: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC USDC
