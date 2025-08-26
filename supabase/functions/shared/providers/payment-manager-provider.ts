@@ -104,7 +104,7 @@ export class PaymentManagerProvider extends BaseProvider {
       display: {
         name: paymentData.display.intent,
         description: paymentData.display.intent,
-        logoUrl: paymentData.metadata?.logoUrl || 'https://example.com/logo.png',
+        logoUrl: paymentData.metadata?.logoUrl || 'https://www.rozo.ai/rozo-logo.png',
       },
       payinchainid: this.mapChainIdToPaymentManagerFormat(preferredChainId),
       payintokenaddress:
@@ -244,13 +244,16 @@ export class PaymentManagerProvider extends BaseProvider {
     return token;
   }
 
+  // "1000000" =》 "1000000.00"
+  // "1" =》 "1.00"
+  // "1.5" =》 "1.50"
   private formatPaymentValue(amount: string): string {
     // If already decimal (contains a dot), pass through
     if (typeof amount === 'string' && amount.includes('.')) return amount;
     // Otherwise assume USDC 6 decimals smallest units and convert
     const units = parseFloat(amount);
     if (!isFinite(units)) return amount;
-    return (units / 1_000_000).toFixed(6).replace(/\.0+$/, '');
+    return (units).toFixed(2);
   }
 
   private getWebhookUrl(): string {
