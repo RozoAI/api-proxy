@@ -8,6 +8,8 @@ export interface PaymentRequest {
   };
   preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
   preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")
+  preferredTokenAddress?: string; // Optional: explicit token address for preferred token on preferredChain
+  receivingAddress?: string; // Optional: explicit receiving address for provider (e.g., Payment Manager)
   destination: PaymentDestination; // For withdrawal after payment completion
   metadata?: Record<string, any>;
 }
@@ -33,6 +35,8 @@ export interface PaymentResponse {
   externalId?: string;
   metadata?: Record<string, any>;
   url?: string;
+  // Deposit expiration for Base chain payments (Daimo provider)
+  depositExpiration?: number;
 }
 
 export interface PaymentSource {
@@ -108,6 +112,32 @@ export interface AquaWebhookEvent {
   cover_percent?: number;
   cover_amount?: number;
   cover_operator?: 'both' | 'one';
+}
+
+export interface PaymentManagerWebhookEvent {
+  id: string;
+  url: string;
+  payment: {
+    id: string;
+    status: PaymentStatus;
+    createdAt: string;
+    receivingAddress: string;
+    memo: string;
+    display: {
+      name: string;
+      description: string;
+      logoUrl: string;
+    };
+    source: any | null;
+    payinchainid: string;
+    payintokenaddress: string;
+    destination: {
+      destinationAddress: string;
+      amountUnits: string;
+    };
+    externalId: string | null;
+    metadata: any | null;
+  };
 }
 
 // Withdrawal API types
