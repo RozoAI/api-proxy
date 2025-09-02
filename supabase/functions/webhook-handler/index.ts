@@ -5,7 +5,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentDatabase } from '../shared/database.ts';
-import { PROVIDER_CONFIG } from '../shared/provider-config.ts';
 import type {
   AquaWebhookEvent,
   DaimoWebhookEvent,
@@ -282,7 +281,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
           amount_local: amountLocal,
           currency_local: currencyLocal,
           to_handle: toHandle,
-          rozoreward_token: PROVIDER_CONFIG.rozorewards.token,
+          rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
           order_id: orderId,
           merchant_order_id: merchantOrderId,
           evm_address: evmAddress,
@@ -291,7 +290,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
 
         if (payment.status === 'payment_completed' && priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle) {
           // Make POST request to rozorewards API
-          const response = await fetch(`${PROVIDER_CONFIG.rozorewards.baseUrl}/rozorewards`, {
+          const response = await fetch(`${Deno.env.get('ROZOREWARD_API')}/rozorewards`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(rozorewardsPayload),

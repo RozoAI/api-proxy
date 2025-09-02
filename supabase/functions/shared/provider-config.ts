@@ -57,12 +57,6 @@ export const PROVIDER_CONFIG = {
       withdrawalIntegration: true,
     },
   },
-
-  // Rozo Rewards API configuration
-  rozorewards: {
-    baseUrl: 'https://api.rozo.ai/v1',
-    token: Deno.env.get('ROZOREWARD_TOKEN') || 'your-rozoreward-token-here',
-  },
 };
 
 // Helper function to get provider for a chain
