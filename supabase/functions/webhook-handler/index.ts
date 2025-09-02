@@ -5,6 +5,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders, handleCors } from '../shared/cors.ts';
 import { PaymentDatabase } from '../shared/database.ts';
+import { PROVIDER_CONFIG } from '../shared/provider-config.ts';
 import type {
   AquaWebhookEvent,
   DaimoWebhookEvent,
@@ -248,6 +249,62 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
       provider: 'payment-manager',
       webhookData: webhookData,
     });
+
+    // Get payment data to extract information for rozorewards API
+    const payment = await db.getPaymentByExternalId(externalRef);
+    if (payment && payment.original_request) {
+      try {
+        const originalRequest = payment.original_request;
+        const metadata = originalRequest.metadata || {};
+        const display = originalRequest.display || {};
+        
+        // Extract required fields
+        const amountLocal = metadata.amount_local;
+        const currencyLocal = metadata.currency_local;
+        const priceCurrency = display.currency || 'USD';
+        const priceAmount = display.paymentValue || originalRequest.amount || payment.amount;
+        const orderId = payment.id;
+        const merchantOrderId = payment.id; // Use payment.id as merchant_order_id since order_id doesn't exist
+        
+        // Get evm address from destination
+        // TODO: add evmAddress for cashback points
+        const evmAddress = webhookData.payment.source?.payerAddress;
+        const toHandle = metadata.to_handle || 'zen';
+
+        // Prepare rozorewards API payload
+        const rozorewardsPayload = {
+          status: 'PAID',
+          price_amount: parseFloat(priceAmount),
+          price_currency: priceCurrency,
+          amount_local: amountLocal,
+          currency_local: currencyLocal,
+          to_handle: toHandle,
+          rozoreward_token: PROVIDER_CONFIG.rozorewards.token,
+          order_id: orderId,
+          merchant_order_id: merchantOrderId,
+          evm_address: evmAddress,
+        };
+        console.log('[WebhookHandler] Sending to rozorewards API:', { paymentId: externalRef, payload: rozorewardsPayload });
+
+        if (payment.status === 'payment_completed' && priceCurrency === 'USD') {
+          // Make POST request to rozorewards API
+          const response = await fetch(`${PROVIDER_CONFIG.rozorewards.baseUrl}/rozorewards`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rozorewardsPayload),
+          });
+          
+          if (!response.ok) {
+            console.error('[WebhookHandler] Failed to send to rozorewards API:', { status: response.status, statusText: response.statusText, paymentId: externalRef });
+          } else {
+            const responseData = await response.json();
+            console.log('[WebhookHandler] Successfully sent to rozorewards API:', { paymentId: externalRef, response: responseData });
+          }
+        }
+      } catch (error) {
+        console.error('[WebhookHandler] Error sending to rozorewards API:', { paymentId: externalRef, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
 
     // Note: No withdrawal integration for Payment Manager as requested
     console.log(
