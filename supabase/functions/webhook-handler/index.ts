@@ -269,7 +269,10 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
         // Get evm address from destination
         // TODO: add evmAddress for cashback points
         const evmAddress = webhookData.payment.source?.payerAddress;
-        const toHandle = metadata.to_handle || 'zen';
+        
+        // Extract handle from appId (format: "rozoRewards-zen")
+        const appId = originalRequest.appId || '';
+        const toHandle = appId.includes('-') ? appId.split('-')[1] : (metadata.to_handle );
 
         // Prepare rozorewards API payload
         const rozorewardsPayload = {
@@ -284,9 +287,9 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
           merchant_order_id: merchantOrderId,
           evm_address: evmAddress,
         };
-        console.log('[WebhookHandler] Sending to rozorewards API:', { paymentId: externalRef, payload: rozorewardsPayload });
+        console.log('[WebhookHandler] Sending to rozorewards API:', { paymentId: externalRef, payload: rozorewardsPayload, appId, toHandle });
 
-        if (payment.status === 'payment_completed' && priceCurrency === 'USD') {
+        if (payment.status === 'payment_completed' && priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle) {
           // Make POST request to rozorewards API
           const response = await fetch(`${PROVIDER_CONFIG.rozorewards.baseUrl}/rozorewards`, {
             method: 'POST',
