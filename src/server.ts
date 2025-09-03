@@ -114,7 +114,33 @@ if (config.nodeEnv === 'development') {
 
 // Preview order endpoint
 app.get('/previewOrder', (req: Request, res: Response): void => {
-  res.json([{"result":{"data":{"orgId":"organization-live-099b8b4a-a4b3-42aa-b315-5bf402ed7e01","mode":"sale","id":"31028208401538883782877931545831136196600609864077037426503372703379424046335","destFinalCallTokenAmount":{"token":{"chainId":8453,"token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","usd":1,"priceFromUsd":1,"decimals":6,"displayDecimals":2,"logoSourceURI":"https://pay.daimo.com/coin-logos/usdc.png","logoURI":"https://pay.daimo.com/coin-logos/usdc.png","maxAcceptUsd":100000,"maxSendUsd":0},"amount":"1000000","usd":1},"destFinalCall":{"to":"0x5772FBe7a7817ef7F586215CA8b23b8dD22C8897","value":"0","data":"0x"},"nonce":"31028208401538883782877931545831136196600609864077037426503372703379424046335","redirectUri":null,"createdAt":null,"lastUpdatedAt":null,"intentStatus":"payment_unpaid","metadata":{"intent":"Pay","items":[],"payer":{}},"externalId":null,"userMetadata":null,"refundAddr":null}}}]);
+  try {
+    // Extract and parse the input parameter
+    const inputParam = req.query.input as string;
+    let toUnits = "1"; // default value
+    
+    if (inputParam) {
+      try {
+        const decodedInput = decodeURIComponent(inputParam);
+        const parsedInput = JSON.parse(decodedInput);
+        
+        // Extract toUnits from the input structure
+        if (parsedInput["0"] && parsedInput["0"].toUnits) {
+          toUnits = parsedInput["0"].toUnits; //
+        }
+      } catch (parseError) {
+        console.error('Error parsing input parameter:', parseError);
+      }
+    }
+    const ret = [{"result":{"data":{"orgId":"organization-live-099b8b4a-a4b3-42aa-b315-5bf402ed7e01","mode":"sale","id":"31028208401538883782877931545831136196600609864077037426503372703379424046335","destFinalCallTokenAmount":{"token":{"chainId":8453,"token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","usd":1,"priceFromUsd":1,"decimals":6,"displayDecimals":2,"logoSourceURI":"https://pay.daimo.com/coin-logos/usdc.png","logoURI":"https://pay.daimo.com/coin-logos/usdc.png","maxAcceptUsd":100000,"maxSendUsd":0},"amount":"1000000","usd":1},"destFinalCall":{"to":"0x5772FBe7a7817ef7F586215CA8b23b8dD22C8897","value":"0","data":"0x"},"nonce":"31028208401538883782877931545831136196600609864077037426503372703379424046335","redirectUri":null,"createdAt":null,"lastUpdatedAt":null,"intentStatus":"payment_unpaid","metadata":{"intent":"Pay","items":[],"payer":{}},"externalId":null,"userMetadata":null,"refundAddr":null}}}];
+
+    ret[0].result.data.destFinalCallTokenAmount.usd = parseFloat(toUnits);
+    ret[0].result.data.destFinalCallTokenAmount.amount = (parseInt((parseFloat(toUnits) * 1000000).toString())).toString();
+    res.json(ret);
+  } catch (error) {
+    console.error('Error in previewOrder endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Forward all requests to backend
