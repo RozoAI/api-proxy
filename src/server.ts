@@ -143,6 +143,115 @@ app.get('/previewOrder', (req: Request, res: Response): void => {
   }
 });
 
+// Mock nav endpoint
+app.post('/nav', (req: Request, res: Response): void => {
+  res.json([{"result":{}}]);
+});
+
+// Mock untronHasAvailableReceivers endpoint
+app.get('/untronHasAvailableReceivers', (req: Request, res: Response): void => {
+  res.json([{"result":{"data":false}}]);
+});
+
+// Mock nav,nav endpoint (comma-separated actions)
+app.post('/nav,nav', (req: Request, res: Response): void => {
+  res.json([{"result":{}},{"result":{}}]);
+});
+
+// Mock getExternalPaymentOptions,getDepositAddressOptions endpoint
+app.get('/getExternalPaymentOptions,getDepositAddressOptions', (req: Request, res: Response): void => {
+  res.json([
+    {
+      "result": {
+        "data": [
+          {
+            "id": "Binance",
+            "optionType": "exchange",
+            "paymentToken": {
+              "chainId": 42161,
+              "token": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+              "symbol": "USDT",
+              "usd": 1,
+              "priceFromUsd": 1,
+              "decimals": 6,
+              "displayDecimals": 2,
+              "logoSourceURI": "https://pay.daimo.com/coin-logos/usdt.png",
+              "logoURI": "https://pay.daimo.com/coin-logos/usdt.png",
+              "maxAcceptUsd": 60000,
+              "maxSendUsd": 0
+            },
+            "cta": "Pay with Binance",
+            "logoURI": "https://pay.daimo.com/wallet-logos/binance-logo.svg",
+            "logoShape": "circle",
+            "disabled": true,
+            "message": "Minimum $15.00",
+            "minimumUsd": 15
+          },
+          {
+            "id": "Coinbase",
+            "optionType": "exchange",
+            "paymentToken": {
+              "chainId": 8453,
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "symbol": "USDC",
+              "usd": 1,
+              "priceFromUsd": 1,
+              "decimals": 6,
+              "displayDecimals": 2,
+              "logoSourceURI": "https://pay.daimo.com/coin-logos/usdc.png",
+              "logoURI": "https://pay.daimo.com/coin-logos/usdc.png",
+              "maxAcceptUsd": 100000,
+              "maxSendUsd": 0
+            },
+            "cta": "Pay with Coinbase",
+            "logoURI": "https://pay.daimo.com/wallet-logos/coinbase-logo.svg",
+            "logoShape": "circle",
+            "disabled": true,
+            "message": "Minimum $5.00",
+            "minimumUsd": 5
+          }
+        ]
+      }
+    },
+    {
+      "result": {
+        "data": [
+          {
+            "id": "USDT on Tron",
+            "logoURI": "https://pay.daimo.com/chain-logos/tronusdt.svg",
+            "minimumUsd": 1
+          },
+          {
+            "id": "Arbitrum",
+            "logoURI": "https://pay.daimo.com/chain-logos/arbitrum.svg",
+            "minimumUsd": 0
+          },
+          {
+            "id": "Base",
+            "logoURI": "https://pay.daimo.com/chain-logos/base.svg",
+            "minimumUsd": 0
+          },
+          {
+            "id": "Optimism",
+            "logoURI": "https://pay.daimo.com/chain-logos/optimism.svg",
+            "minimumUsd": 0
+          },
+          {
+            "id": "Polygon",
+            "logoURI": "https://pay.daimo.com/chain-logos/polygon.svg",
+            "minimumUsd": 0
+          },
+          {
+            "id": "Ethereum",
+            "logoURI": "https://pay.daimo.com/chain-logos/ethereum.svg",
+            "minimumUsd": 10
+          }
+        ]
+      }
+    }
+  ]);
+});
+
 // Forward all requests to backend
 app.all('*', async (req: Request, res: Response): Promise<void> => {
   try {
