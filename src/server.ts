@@ -164,52 +164,6 @@ app.get('/getExternalPaymentOptions,getDepositAddressOptions', (req: Request, re
     {
       "result": {
         "data": [
-          {
-            "id": "Binance",
-            "optionType": "exchange",
-            "paymentToken": {
-              "chainId": 42161,
-              "token": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-              "symbol": "USDT",
-              "usd": 1,
-              "priceFromUsd": 1,
-              "decimals": 6,
-              "displayDecimals": 2,
-              "logoSourceURI": "https://pay.daimo.com/coin-logos/usdt.png",
-              "logoURI": "https://pay.daimo.com/coin-logos/usdt.png",
-              "maxAcceptUsd": 60000,
-              "maxSendUsd": 0
-            },
-            "cta": "Pay with Binance",
-            "logoURI": "https://pay.daimo.com/wallet-logos/binance-logo.svg",
-            "logoShape": "circle",
-            "disabled": true,
-            "message": "Minimum $15.00",
-            "minimumUsd": 15
-          },
-          {
-            "id": "Coinbase",
-            "optionType": "exchange",
-            "paymentToken": {
-              "chainId": 8453,
-              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-              "symbol": "USDC",
-              "usd": 1,
-              "priceFromUsd": 1,
-              "decimals": 6,
-              "displayDecimals": 2,
-              "logoSourceURI": "https://pay.daimo.com/coin-logos/usdc.png",
-              "logoURI": "https://pay.daimo.com/coin-logos/usdc.png",
-              "maxAcceptUsd": 100000,
-              "maxSendUsd": 0
-            },
-            "cta": "Pay with Coinbase",
-            "logoURI": "https://pay.daimo.com/wallet-logos/coinbase-logo.svg",
-            "logoShape": "circle",
-            "disabled": true,
-            "message": "Minimum $5.00",
-            "minimumUsd": 5
-          }
         ]
       }
     },
