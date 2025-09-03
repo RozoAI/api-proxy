@@ -112,6 +112,11 @@ if (config.nodeEnv === 'development') {
   });
 }
 
+// Preview order endpoint
+app.get('/previewOrder', (req: Request, res: Response): void => {
+  res.json([{"result":{"data":{"orgId":"organization-live-099b8b4a-a4b3-42aa-b315-5bf402ed7e01","mode":"sale","id":"31028208401538883782877931545831136196600609864077037426503372703379424046335","destFinalCallTokenAmount":{"token":{"chainId":8453,"token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","usd":1,"priceFromUsd":1,"decimals":6,"displayDecimals":2,"logoSourceURI":"https://pay.daimo.com/coin-logos/usdc.png","logoURI":"https://pay.daimo.com/coin-logos/usdc.png","maxAcceptUsd":100000,"maxSendUsd":0},"amount":"1000000","usd":1},"destFinalCall":{"to":"0x5772FBe7a7817ef7F586215CA8b23b8dD22C8897","value":"0","data":"0x"},"nonce":"31028208401538883782877931545831136196600609864077037426503372703379424046335","redirectUri":null,"createdAt":null,"lastUpdatedAt":null,"intentStatus":"payment_unpaid","metadata":{"intent":"Pay","items":[],"payer":{}},"externalId":null,"userMetadata":null,"refundAddr":null}}}]);
+});
+
 // Forward all requests to backend
 app.all('*', async (req: Request, res: Response): Promise<void> => {
   try {
