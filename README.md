@@ -20,7 +20,7 @@ Returns server health status and configuration.
 
 #### `GET /getWalletPaymentOptions`
 
-Enhanced endpoint that returns detailed wallet payment options with token balances.
+Enhanced endpoint that returns detailed wallet payment options with token balances for EVM chains.
 
 **Query Parameters:**
 
@@ -38,7 +38,26 @@ Enhanced endpoint that returns detailed wallet payment options with token balanc
 }
 ```
 
-**Response Format:**
+#### `GET /getSolanaPaymentOptions`
+
+Enhanced endpoint that returns detailed payment options with USDC token balance for Solana wallets.
+
+**Query Parameters:**
+
+- `input`: JSON string containing Solana payment options input
+
+**Input Format:**
+
+```json
+{
+  "0": {
+    "pubKey": "BK1CMQ2kSvxUNa8pZsfvN2UoZDHWVwgYsXKUVZgURAGF",
+    "usdRequired": 5
+  }
+}
+```
+
+**EVM Response Format:**
 
 ```json
 [
@@ -92,6 +111,60 @@ Enhanced endpoint that returns detailed wallet payment options with token balanc
 ]
 ```
 
+**Solana Response Format:**
+
+```json
+[
+  {
+    "result": {
+      "data": [
+        {
+          "required": {
+            "token": {
+              "chainId": 501,
+              "token": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "symbol": "USDC",
+              "usd": 1,
+              "priceFromUsd": 1,
+              "decimals": 6,
+              "displayDecimals": 2,
+              "logoSourceURI": "https://pay.daimo.com/coin-logos/usdc.png",
+              "logoURI": "https://pay.daimo.com/coin-logos/usdc.png",
+              "maxAcceptUsd": 100000,
+              "maxSendUsd": 0
+            },
+            "amount": "5000000",
+            "usd": 5
+          },
+          "balance": {
+            "token": {
+              /* same token object */
+            },
+            "amount": "2500000",
+            "usd": 2.5
+          },
+          "minimumRequired": {
+            "token": {
+              /* same token object */
+            },
+            "amount": "100000",
+            "usd": 0.1
+          },
+          "fees": {
+            "token": {
+              /* same token object */
+            },
+            "amount": "0",
+            "usd": 0
+          },
+          "disabledReason": "Balance too low: $2.50"
+        }
+      ]
+    }
+  }
+]
+```
+
 ### Mock Endpoints
 
 - `GET /previewOrder` - Returns mock order preview data
@@ -99,6 +172,7 @@ Enhanced endpoint that returns detailed wallet payment options with token balanc
 - `GET /untronHasAvailableReceivers` - Mock Tron receivers check
 - `POST /nav,nav` - Mock multiple navigation actions
 - `GET /getExternalPaymentOptions,getDepositAddressOptions` - Mock external payment and deposit options
+- `GET /getSolanaPaymentOptions` - Enhanced Solana USDC balance and payment options
 
 ## Configuration
 
@@ -181,6 +255,28 @@ export type Token = {
 - `knownTokens` - All supported tokens across chains
 - `knownAlchemyTokens` - Tokens with Alchemy network mappings
 - `knownTokensByAlchemyNetwork` - Tokens grouped by Alchemy network
+
+### `evm.ts`
+
+Handles EVM chain wallet payment options and token balance retrieval.
+
+**Key Functions:**
+
+- `getTokensBalance()` - Fetches and processes token balances for EVM wallets
+- Supports multiple EVM chains (Base, Polygon, Arbitrum)
+- Integrates with Alchemy Portfolio API for real-time balance data
+- Calculates payment requirements, fees, and balance sufficiency
+
+### `solana.ts`
+
+Handles Solana wallet payment options and USDC balance retrieval.
+
+**Key Functions:**
+
+- `getSolanaPaymentOptions()` - Fetches USDC balance for Solana wallets
+- Uses Associated Token Account (ATA) derivation for USDC balances
+- Integrates with Alchemy Solana RPC for balance queries
+- Provides structured payment option data similar to EVM chains
 
 ## Installation
 
