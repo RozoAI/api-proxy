@@ -268,13 +268,25 @@ app.get(
       !data ||
       typeof data !== "object" ||
       !("payerAddress" in data) ||
-      !("usdRequired" in data) ||
       !("destChainId" in data)
     ) {
       res.status(400).json({
         error: "Invalid input",
-        message:
-          "Expected object with payerAddress, usdRequired, and destChainId properties",
+        message: "Expected object with payerAddress and destChainId properties",
+        received: data,
+      });
+      return;
+    }
+
+    // Validate usdRequired if provided
+    if (
+      "usdRequired" in data &&
+      data.usdRequired !== undefined &&
+      typeof data.usdRequired !== "number"
+    ) {
+      res.status(400).json({
+        error: "Invalid input",
+        message: "usdRequired must be a number if provided",
         received: data,
       });
       return;
@@ -319,8 +331,17 @@ app.get(
       return;
     }
 
-    if (!data?.usdRequired || typeof data.usdRequired !== "number") {
-      res.status(400).json({ error: "usdRequired must be a number" });
+    // Validate usdRequired if provided
+    if (
+      "usdRequired" in data &&
+      data.usdRequired !== undefined &&
+      typeof data.usdRequired !== "number"
+    ) {
+      res.status(400).json({
+        error: "Invalid input",
+        message: "usdRequired must be a number if provided",
+        received: data,
+      });
       return;
     }
 

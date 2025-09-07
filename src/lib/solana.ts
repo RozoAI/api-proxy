@@ -6,13 +6,16 @@ const USDC_MINT = new PublicKey(solanaUSDC.token);
 
 export interface GetSolanaPaymentOptionsInput {
   pubKey: string;
-  usdRequired: number;
+  usdRequired?: number;
 }
 
 export async function getSolanaPaymentOptions({
   pubKey,
   usdRequired,
 }: GetSolanaPaymentOptionsInput) {
+  // Handle empty or undefined usdRequired
+  const normalizedUsdRequired = usdRequired || 0;
+
   try {
     // Derive ATA
     const ata = await getAssociatedTokenAddress(
@@ -51,14 +54,14 @@ export async function getSolanaPaymentOptions({
         body.error.code === -32602 ||
         body.error.message?.includes("could not find account")
       ) {
-        return createPaymentOption(0, usdRequired);
+        return createPaymentOption(0, normalizedUsdRequired);
       }
       throw new Error(`RPC Error: ${body.error.message}`);
     }
 
     const balanceData = body.result?.value;
     if (!balanceData) {
-      return createPaymentOption(0, usdRequired);
+      return createPaymentOption(0, normalizedUsdRequired);
     }
 
     // Convert balance from token units to decimal
@@ -66,10 +69,10 @@ export async function getSolanaPaymentOptions({
       Number.parseFloat(balanceData.amount) /
       Math.pow(10, balanceData.decimals);
 
-    return createPaymentOption(balanceValue, usdRequired);
+    return createPaymentOption(balanceValue, normalizedUsdRequired);
   } catch (error) {
     console.error("Error fetching Solana payment options:", error);
-    return createPaymentOption(0, usdRequired);
+    return createPaymentOption(0, normalizedUsdRequired);
   }
 }
 

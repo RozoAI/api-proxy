@@ -25,7 +25,7 @@ interface TokenBalance {
 
 export interface GetWalletPaymentOptionsInput {
   payerAddress: string;
-  usdRequired: number;
+  usdRequired?: number;
   destChainId: number;
 }
 
@@ -34,6 +34,8 @@ export async function getEvmTokensBalance({
   usdRequired,
   destChainId,
 }: GetWalletPaymentOptionsInput) {
+  // Handle empty or undefined usdRequired
+  const normalizedUsdRequired = usdRequired || 0;
   const tokenMap = new Map(knownTokens.map((token) => [token.token, token]));
   const response = await alchemy.portfolio.getTokensByWallet([
     {
@@ -63,7 +65,7 @@ export async function getEvmTokensBalance({
 
       return createEvmPaymentOption(
         balanceValue,
-        usdRequired,
+        normalizedUsdRequired,
         knownToken,
         decimals
       );
