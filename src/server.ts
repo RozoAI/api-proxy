@@ -12,6 +12,8 @@ import {
 } from "alchemy-sdk";
 import { formatUnits, getAddress, hexToBigInt } from "viem";
 import { knownAlchemyTokens, knownTokens } from "./lib/token";
+import { getEvmTokensBalance } from './lib/evm';
+import { getSolanaPaymentOptions } from './lib/solana';
 
 // Load environment variables - check for env.dev first if in development
 if (process.env.NODE_ENV === 'development') {
@@ -253,7 +255,6 @@ app.get('/getExternalPaymentOptions,getDepositAddressOptions', (req: Request, re
 app.get(
   "/getWalletPaymentOptions",
   async (req: Request, res: Response): Promise<void> => {
-    const tokenMap = new Map(knownTokens.map((token) => [token.token, token]));
     const input = req.query.input;
 
     const inputData =
@@ -261,112 +262,41 @@ app.get(
         ? Object.values(JSON.parse(input))
         : Object.values(input || {});
 
-    const data = inputData[0] as GetWalletPaymentOptionsInput;
+    const data = inputData[0];
 
-    if (!data) {
-      res.status(400).json({ error: "Invalid input" });
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("payerAddress" in data) ||
+      !("destChainId" in data)
+    ) {
+      res.status(400).json({
+        error: "Invalid input",
+        message: "Expected object with payerAddress and destChainId properties",
+        received: data,
+      });
       return;
     }
 
-    const response = await alchemy.portfolio.getTokensByWallet([
-      {
-        address: data.payerAddress,
-        networks: knownAlchemyTokens.map((token) => token.alchemyNetwork),
-      },
-    ]);
-
-    const processedTokens = (response.data.tokens as TokenBalance[])
-      .map((item) => {
-        if (!item.tokenAddress) return null;
-
-        const tokenAddress = getAddress(item.tokenAddress);
-        const knownToken = tokenMap.get(tokenAddress);
-
-        if (!knownToken) return null;
-
-        const balanceBigInt = hexToBigInt(item.tokenBalance as `0x${string}`);
-        const decimals =
-          item.tokenMetadata?.decimals ?? knownToken.decimals ?? 18;
-        const formattedBalance = formatUnits(balanceBigInt, decimals);
-        const balanceValue = Number.parseFloat(
-          Number.parseFloat(formattedBalance).toFixed(
-            knownToken.decimals === 18 ? 5 : 2
-          )
-        );
-
-        // Assume 1 USD = 1 token for stablecoins (USDC), adjust as needed for other tokens
-        const usdPrice = knownToken.fiatISO === "USD" ? 1 : 1; // This should be dynamic based on actual price feeds
-        const balanceUsd = balanceValue * usdPrice;
-
-        // Calculate required amount in token units
-        const requiredTokenAmount = Math.ceil(
-          (data.usdRequired / usdPrice) * Math.pow(10, decimals)
-        );
-        const requiredUsd = data.usdRequired;
-
-        // Calculate minimum required (assume 10 cents minimum)
-        const minimumUsd = 0.1;
-        const minimumTokenAmount = Math.ceil(
-          (minimumUsd / usdPrice) * Math.pow(10, decimals)
-        );
-
-        // Calculate fees (assume no fees for now)
-        const feesUsd = 0;
-        const feesTokenAmount = "0";
-
-        // Check if balance is sufficient
-        const isBalanceSufficient = balanceUsd >= requiredUsd;
-        const disabledReason = isBalanceSufficient
-          ? undefined
-          : `Balance too low: $${balanceUsd.toFixed(2)}`;
-
-        // Create the token metadata object
-        const tokenMetadata = {
-          chainId: knownToken.chainId,
-          token: knownToken.token,
-          symbol: knownToken.symbol,
-          usd: usdPrice,
-          priceFromUsd: usdPrice,
-          decimals: knownToken.decimals,
-          displayDecimals: knownToken.decimals === 18 ? 5 : 2,
-          logoSourceURI: knownToken.logoSourceURI,
-          logoURI: knownToken.logoURI,
-          maxAcceptUsd: isBalanceSufficient ? 100000 : 30000, // Different limits based on balance
-          maxSendUsd: 0,
-        };
-
-        return {
-          required: {
-            token: tokenMetadata,
-            amount: requiredTokenAmount.toString(),
-            usd: requiredUsd,
-          },
-          balance: {
-            token: tokenMetadata,
-            amount: Math.floor(
-              balanceValue * Math.pow(10, decimals)
-            ).toString(),
-            usd: balanceUsd,
-          },
-          minimumRequired: {
-            token: tokenMetadata,
-            amount: minimumTokenAmount.toString(),
-            usd: minimumUsd,
-          },
-          fees: {
-            token: tokenMetadata,
-            amount: feesTokenAmount,
-            usd: feesUsd,
-          },
-          ...(disabledReason && { disabledReason }),
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        const balanceA = a?.balance?.usd || 0;
-        const balanceB = b?.balance?.usd || 0;
-        return balanceB - balanceA;
+    // Validate usdRequired if provided
+    if (
+      "usdRequired" in data &&
+      data.usdRequired !== undefined &&
+      typeof data.usdRequired !== "number"
+    ) {
+      res.status(400).json({
+        error: "Invalid input",
+        message: "usdRequired must be a number if provided",
+        received: data,
       });
+      return;
+    }
+
+    console.log("data", data);
+
+    const processedTokens = await getEvmTokensBalance(
+      data as GetWalletPaymentOptionsInput
+    );
 
     res.json([
       {
@@ -375,6 +305,59 @@ app.get(
         },
       },
     ]);
+  }
+);
+
+/**
+ * Enhanced getSolanaPaymentOptions endpoint
+ *
+ * @example
+ * getSolanaPaymentOptions?input={"0":{"pubKey":"BK1CMQ2kSvxUNa8pZsfvN2UoZDHWVwgYsXKUVZgURAGF","usdRequired":5}}
+ */
+app.get(
+  "/getSolanaPaymentOptions",
+  async (req: Request, res: Response): Promise<void> => {
+    const input = req.query.input;
+    const inputData =
+      typeof input === "string"
+        ? Object.values(JSON.parse(input))
+        : Object.values(input || {});
+    const data = inputData[0] as any;
+
+    console.log("getSolanaPaymentOptions input:", data);
+
+    if (!data?.pubKey) {
+      res.status(400).json({ error: "pubKey is required" });
+      return;
+    }
+
+    // Validate usdRequired if provided
+    if (
+      "usdRequired" in data &&
+      data.usdRequired !== undefined &&
+      typeof data.usdRequired !== "number"
+    ) {
+      res.status(400).json({
+        error: "Invalid input",
+        message: "usdRequired must be a number if provided",
+        received: data,
+      });
+      return;
+    }
+
+    try {
+      const processedTokens = await getSolanaPaymentOptions({
+        pubKey: data.pubKey,
+        usdRequired: data.usdRequired,
+      });
+
+      console.log("getSolanaPaymentOptions result:", processedTokens);
+
+      res.json([{ result: { data: processedTokens } }]);
+    } catch (error) {
+      console.error("Error in getSolanaPaymentOptions:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
 );
 
