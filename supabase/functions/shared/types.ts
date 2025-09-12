@@ -140,6 +140,29 @@ export interface PaymentManagerWebhookEvent {
   };
 }
 
+export interface MugglePayWebhookEvent {
+  order_id: string;
+  merchant_order_id: string;
+  status: 'NEW' | 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'FAILED';
+  price_amount: number;
+  price_currency: string;
+  pay_amount?: number;
+  pay_currency: string;
+  txid?: string;
+  created_at: string;
+  updated_at: string;
+  paid_at?: string;
+  network?: string;
+  address?: string;
+  from_address?: string;
+  title: string;
+  description?: string;
+  callback_url: string;
+  success_url: string;
+  cancel_url: string;
+  metadata?: Record<string, any>;
+}
+
 // Withdrawal API types
 export interface CreateWithdrawalRequest {
   chain: 'stellar' | 'base' | 'solana';

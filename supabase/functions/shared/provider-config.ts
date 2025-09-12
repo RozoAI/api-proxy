@@ -29,6 +29,13 @@ export const PROVIDER_CONFIG = {
       apiKey: Deno.env.get('AQUA_API_TOKEN'),
       timeout: 30000,
     },
+    mugglepay: {
+      enabled: true, // Set to true to enable MugglePay
+      name: 'mugglepay',
+      baseUrl: Deno.env.get('MUGGLEPAY_BASE_URL') || 'https://api.mugglepay.com',
+      apiKey: Deno.env.get('MUGGLEPAY_API_TOKEN'),
+      timeout: 30000,
+    },
   },
 
   // Chain routing configuration
@@ -37,6 +44,7 @@ export const PROVIDER_CONFIG = {
     defaultProvider: 'payment-manager',
     // Override specific chains if needed
     overrides: {
+      '56': 'mugglepay', // Route BSC to MugglePay
       // Example: '10001': 'aqua', // Route Stellar to Aqua
       // Example: '1': 'daimo',    // Route Ethereum to Daimo
     },
@@ -54,6 +62,10 @@ export const PROVIDER_CONFIG = {
     },
     aqua: {
       enabled: false,
+      withdrawalIntegration: true,
+    },
+    mugglepay: {
+      enabled: true,
       withdrawalIntegration: true,
     },
   },
