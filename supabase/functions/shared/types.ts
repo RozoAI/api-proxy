@@ -5,6 +5,7 @@ export interface PaymentRequest {
   display: {
     intent: string;
     currency: string;
+    paymentValue?: string; // Amount to be paid (different from withdrawal amount)
   };
   preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
   preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")

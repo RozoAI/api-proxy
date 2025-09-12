@@ -129,11 +129,11 @@ export class MugglePayProvider extends BaseProvider {
     
     return {
       merchant_order_id: merchantOrderId,
-      price_amount: paymentData.destination.amountUnits,
+      price_amount: parseFloat(paymentData.display.paymentValue || paymentData.destination.amountUnits || '0'),
       price_currency: paymentData.display.currency || 'USD',
       pay_currency: paymentToken, // e.g., "USDT_BNB" for BSC USDT
       title: paymentData.display.intent || 'Payment',
-      description: `${paymentData.display.intent} - ${paymentData.destination.amountUnits} ${paymentData.display.currency}`,
+      description: `${paymentData.display.intent} - ${paymentData.display.paymentValue || paymentData.destination.amountUnits} ${paymentData.display.currency}`,
       callback_url: this.getCallbackUrl(),
       cancel_url: this.getCancelUrl(),
       success_url: this.getSuccessUrl(),
@@ -190,45 +190,51 @@ export class MugglePayProvider extends BaseProvider {
     mugglePayResponse: any,
     originalRequest?: PaymentRequest
   ): PaymentResponse {
-    const paymentId = `mugglepay_order_${mugglePayResponse.order_id || mugglePayResponse.id || Date.now()}`;
+    // Handle MugglePay response structure: { status, order, payment_url, invoice }
+    const order = mugglePayResponse.order || mugglePayResponse;
+    const invoice = mugglePayResponse.invoice || {};
+    
+    const paymentId = `mugglepay_order_${order.order_id || order.id || Date.now()}`;
     const paymentToken = this.getMugglePayToken(originalRequest?.preferredChain || '56', originalRequest?.preferredToken || 'USDT');
 
     return {
       id: paymentId,
-      status: this.mapMugglePayStatus(mugglePayResponse.status || 'NEW') as PaymentStatus,
-      createdAt: mugglePayResponse.created_at
-        ? new Date(mugglePayResponse.created_at).toISOString()
+      status: this.mapMugglePayStatus(order.status || 'NEW') as PaymentStatus,
+      createdAt: order.created_at
+        ? new Date(order.created_at).toISOString()
         : new Date().toISOString(),
       display: {
-        intent: originalRequest?.display.intent || mugglePayResponse.metadata?.rozo_intent || mugglePayResponse.title || '',
-        currency: originalRequest?.display.currency || mugglePayResponse.metadata?.rozo_currency || mugglePayResponse.price_currency || 'USD',
+        intent: originalRequest?.display.intent || order.title || '',
+        currency: originalRequest?.display.currency || order.price_currency || 'USD',
       },
       source: null, // MugglePay doesn't provide source information initially
       destination: {
         destinationAddress: originalRequest?.destination.destinationAddress || '',
-        txHash: mugglePayResponse.txid || mugglePayResponse.transaction_hash || null,
-        chainId: originalRequest?.destination?.chainId || originalRequest?.preferredChain || this.getChainIdFromToken(mugglePayResponse.pay_currency || mugglePayResponse.token),
-        amountUnits: originalRequest?.destination.amountUnits || mugglePayResponse.price_amount?.toString() || '',
-        tokenSymbol: originalRequest?.destination?.tokenSymbol || this.mapMugglePayTokenToSymbol(mugglePayResponse.pay_currency || mugglePayResponse.token),
-        tokenAddress: originalRequest?.destination?.tokenAddress || this.getTokenAddress(mugglePayResponse.pay_currency || mugglePayResponse.token),
+        txHash: invoice.txid || order.transaction_hash || null,
+        chainId: originalRequest?.destination?.chainId || originalRequest?.preferredChain || this.getChainIdFromToken(invoice.pay_currency || paymentToken),
+        amountUnits: originalRequest?.display?.paymentValue || order.price_amount?.toString() || originalRequest?.destination.amountUnits || '', // 支付金额
+        tokenSymbol: originalRequest?.destination?.tokenSymbol || this.mapMugglePayTokenToSymbol(invoice.pay_currency || paymentToken), // 提现链token
+        tokenAddress: originalRequest?.destination?.tokenAddress || this.getTokenAddress(invoice.pay_currency || paymentToken), // 提现链token地址
       },
-      externalId: originalRequest?.externalId || mugglePayResponse.metadata?.rozo_external_id || mugglePayResponse.merchant_order_id || null,
+      externalId: originalRequest?.externalId || order.merchant_order_id || null,
       metadata: {
         ...originalRequest?.metadata,
-        ...mugglePayResponse.metadata?.original_metadata,
         webhookUrl: this.getCallbackUrl(),
         provider: 'mugglepay',
-        receivingAddress: mugglePayResponse.address || mugglePayResponse.receiving_address || null,
-        memo: mugglePayResponse.memo || null,
-        payinchainid: originalRequest?.preferredChain || this.getChainIdFromToken(mugglePayResponse.pay_currency || mugglePayResponse.token),
-        payintokenaddress: this.getTokenAddress(paymentToken),
-        mugglepay_order_id: mugglePayResponse.order_id || mugglePayResponse.id,
-        mugglepay_status: mugglePayResponse.status,
-        mugglepay_pay_currency: mugglePayResponse.pay_currency || mugglePayResponse.token || paymentToken,
-        mugglepay_callback_url: mugglePayResponse.callback_url,
-        mugglepay_merchant_order_id: mugglePayResponse.merchant_order_id,
+        receivingAddress: invoice.address || invoice.qrcode || null, // MugglePay provides payment address in invoice.address or invoice.qrcode
+        memo: invoice.memo || null,
+        payinchainid: originalRequest?.preferredChain || this.getChainIdFromToken(invoice.pay_currency || paymentToken),
+        payintokenaddress: this.getTokenAddress(invoice.pay_currency || paymentToken),
+        mugglepay_order_id: order.order_id || order.id,
+        mugglepay_invoice_id: invoice.invoice_id,
+        mugglepay_status: order.status,
+        mugglepay_pay_currency: invoice.pay_currency || paymentToken,
+        mugglepay_pay_amount: invoice.pay_amount || order.pay_amount,
+        mugglepay_callback_url: order.callback_url,
+        mugglepay_merchant_order_id: order.merchant_order_id,
+        mugglepay_expired_at: invoice.expired_at,
       },
-      url: mugglePayResponse.invoice_url || mugglePayResponse.payment_url || `${this.config.baseUrl}/invoice?order_id=${mugglePayResponse.order_id}`,
+      url: mugglePayResponse.payment_url || `${this.config.baseUrl}/invoices?id=${order.order_id}`,
     };
   }
 
