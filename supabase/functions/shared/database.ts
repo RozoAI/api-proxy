@@ -25,13 +25,14 @@ export class PaymentDatabase {
     providerName: string
   ): Promise<PaymentRecord> {
     // Validate amount is positive (matches database CHECK constraint)
-    const amount = parseFloat(paymentRequest.destination.amountUnits);
+    // Use payment amount (display.paymentValue) instead of withdrawal amount (destination.amountUnits)
+    const amount = parseFloat(paymentRequest.display.paymentValue || paymentRequest.destination.amountUnits);
     if (isNaN(amount) || amount <= 0) {
       throw new Error('Amount must be a positive number');
     }
 
     const paymentData = {
-      amount: amount, // Use withdrawal amount for database storage
+      amount: amount, // Use payment amount for database storage
       currency: paymentRequest.display.currency,
       status: paymentResponse.status,
       external_id: paymentResponse.id,

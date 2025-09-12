@@ -27,5 +27,6 @@
     "check": "deno check **/*.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
-  }
+  },
+  "lock": false
 } 

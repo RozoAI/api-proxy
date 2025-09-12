@@ -6,5 +6,5 @@
   "tasks": {
     "start": "deno run --allow-all index.ts"
   },
-  "lock": false
+  // "lock": false
 } 
