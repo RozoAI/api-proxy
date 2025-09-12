@@ -1,6 +1,6 @@
 import { Network } from "alchemy-sdk";
 import { getAddress } from "viem";
-import { arbitrum, base, polygon, solana, token } from "./chain";
+import { arbitrum, base, bsc, polygon, solana, token } from "./chain";
 
 export type Token = {
   /** Chain ID, eg 10 for OP Mainnet */
@@ -25,6 +25,7 @@ export type Token = {
 
 export enum TokenLogo {
   USDC = "https://pay.daimo.com/coin-logos/usdc.png",
+  USDT = "https://pay.daimo.com/coin-logos/usdt.png",
 }
 
 /* --------------------- Tokens Constants --------------------- */
@@ -94,13 +95,41 @@ export const solanaUSDC: Token = token({
   alchemyNetwork: solana.alchemyNetwork,
 });
 
-const solanaTokens: Token[] = [solanaUSDC];
+export const solanaSOL: Token = token({
+  chainId: solana.chainId,
+  token: "11111111111111111111111111111112", // System Program (native SOL)
+  decimals: 9,
+  name: "Solana",
+  symbol: "SOL",
+  logoURI: "https://pay.daimo.com/coin-logos/sol.png",
+  alchemyNetwork: solana.alchemyNetwork,
+});
+
+const solanaTokens: Token[] = [solanaUSDC, solanaSOL];
+
+//
+// BNB Smart Chain
+//
+
+export const bscUSDT: Token = token({
+  chainId: bsc.chainId,
+  token: getAddress("0x55d398326f99059fF775485246999027B3197955"),
+  decimals: 18,
+  fiatISO: "USD",
+  name: "Tether USD",
+  symbol: "USDT",
+  logoURI: TokenLogo.USDT,
+  alchemyNetwork: bsc.alchemyNetwork,
+});
+
+const bscTokens: Token[] = [bscUSDT];
 
 const knownTokensByChain = new Map<number, Token[]>([
   [base.chainId, baseTokens],
   [polygon.chainId, polygonTokens],
   [arbitrum.chainId, arbitrumTokens],
   [solana.chainId, solanaTokens],
+  [bsc.chainId, bscTokens],
 ]);
 
 export const knownTokensByAlchemyNetwork = new Map<Network, Token[]>([
@@ -108,6 +137,7 @@ export const knownTokensByAlchemyNetwork = new Map<Network, Token[]>([
   [polygon.alchemyNetwork, polygonTokens],
   [arbitrum.alchemyNetwork, arbitrumTokens],
   [solana.alchemyNetwork, solanaTokens],
+  [bsc.alchemyNetwork, bscTokens],
 ]);
 
 /**
