@@ -8,6 +8,7 @@ import { PaymentDatabase } from '../shared/database.ts';
 import type {
   AquaWebhookEvent,
   DaimoWebhookEvent,
+  MugglePayWebhookEvent,
   PaymentManagerWebhookEvent,
   PaymentStatus,
 } from '../shared/types.ts';
@@ -63,6 +64,8 @@ serve(async (req) => {
       result = await handleDaimoWebhook(webhookData as DaimoWebhookEvent);
     } else if (provider === 'aqua') {
       result = await handleAquaWebhook(webhookData as AquaWebhookEvent);
+    } else if (provider === 'mugglepay') {
+      result = await handleMugglePayWebhook(webhookData as MugglePayWebhookEvent);
     } else if (provider === 'payment-manager') {
       result = await handlePaymentManagerWebhook(webhookData as PaymentManagerWebhookEvent);
     } else {
@@ -211,6 +214,123 @@ async function handleAquaWebhook(webhookData: AquaWebhookEvent): Promise<any> {
   }
 }
 
+async function handleMugglePayWebhook(webhookData: MugglePayWebhookEvent): Promise<any> {
+  console.log(`[WebhookHandler] Processing MugglePay webhook for order: ${webhookData.order_id}`);
+
+  try {
+    // Map MugglePay status to our status
+    const status = mapMugglePayStatusToPaymentStatus(webhookData.status);
+
+    // Find payment by external_id (merchant_order_id or order_id)
+    let existingPayment = await db.getPaymentByExternalId(webhookData.merchant_order_id);
+    
+    if (!existingPayment) {
+      // Try to find by MugglePay order ID as fallback
+      existingPayment = await db.getPaymentByExternalId(`mugglepay_order_${webhookData.order_id}`);
+    }
+
+    if (!existingPayment) {
+      console.warn(`[WebhookHandler] No payment found for MugglePay order: ${webhookData.order_id}, merchant_order_id: ${webhookData.merchant_order_id}`);
+      return {
+        success: false,
+        message: 'Payment not found',
+        order_id: webhookData.order_id,
+        merchant_order_id: webhookData.merchant_order_id,
+      };
+    }
+
+    // Update payment status and transaction details
+    await db.updatePaymentStatus(existingPayment.external_id!, status, {
+      source_address: webhookData.from_address,
+      source_tx_hash: webhookData.txid,
+      provider_response: webhookData,
+    });
+
+    // If payment is completed, trigger withdrawal integration or rewards processing
+    if (status === 'payment_completed') {
+      console.log(`[WebhookHandler] MugglePay payment completed, processing rewards/withdrawal for: ${existingPayment.id}`);
+      
+      // Get updated payment data for rewards processing
+      const payment = await db.getPaymentByExternalId(existingPayment.external_id!);
+      if (payment && payment.original_request) {
+        try {
+          const originalRequest = payment.original_request;
+          const metadata = originalRequest.metadata || {};
+          const display = originalRequest.display || {};
+          
+          // Extract required fields for rewards processing
+          const amountLocal = metadata.amount_local;
+          const currencyLocal = metadata.currency_local;
+          const priceCurrency = display.currency || webhookData.price_currency || 'USD';
+          const priceAmount = display.paymentValue || webhookData.price_amount;
+          const orderId = payment.id;
+          const merchantOrderId = webhookData.merchant_order_id;
+          
+          // Get evm address from webhook (payer address)
+          const evmAddress = webhookData.from_address;
+          
+          // Extract handle from appId
+          const appId = originalRequest.appId || '';
+          const toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
+
+          // Prepare rozorewards API payload if this is a rewards payment
+          if (appId.includes('rozoRewards') && toHandle && priceCurrency === 'USD') {
+            const rozorewardsPayload = {
+              status: 'PAID',
+              price_amount: parseFloat(priceAmount?.toString() || '0'),
+              price_currency: priceCurrency,
+              amount_local: amountLocal,
+              currency_local: currencyLocal,
+              to_handle: toHandle,
+              rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
+              order_id: orderId,
+              merchant_order_id: merchantOrderId,
+              evm_address: evmAddress,
+            };
+
+            console.log('[WebhookHandler] Sending MugglePay payment to rozorewards API:', { paymentId: existingPayment.external_id, payload: rozorewardsPayload, appId, toHandle });
+
+            // Make POST request to rozorewards API
+            const response = await fetch(`${Deno.env.get('ROZOREWARD_API')}/rozorewards`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(rozorewardsPayload),
+            });
+            
+            if (!response.ok) {
+              console.error('[WebhookHandler] Failed to send MugglePay payment to rozorewards API:', { status: response.status, statusText: response.statusText, paymentId: existingPayment.external_id });
+            } else {
+              const responseData = await response.json();
+              console.log('[WebhookHandler] Successfully sent MugglePay payment to rozorewards API:', { paymentId: existingPayment.external_id, response: responseData });
+            }
+          }
+
+          // Trigger withdrawal integration if enabled
+          if (Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true') {
+            await triggerWithdrawalIntegration(existingPayment.id);
+          }
+        } catch (error) {
+          console.error('[WebhookHandler] Error processing MugglePay rewards/withdrawal:', { paymentId: existingPayment.external_id, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: 'MugglePay webhook processed successfully',
+      order_id: webhookData.order_id,
+      merchant_order_id: webhookData.merchant_order_id,
+      payment_id: existingPayment.id,
+      status: status,
+      transaction_hash: webhookData.txid || null,
+      processed_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error(`[WebhookHandler] Error processing MugglePay webhook:`, error);
+    throw error;
+  }
+}
+
 async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEvent): Promise<any> {
   console.log(
     `[WebhookHandler] Processing Payment Manager webhook for payment: ${webhookData.payment.id}`
@@ -350,6 +470,19 @@ function mapAquaStatusToPaymentStatus(aquaStatus: string): PaymentStatus {
   return statusMap[aquaStatus] || 'payment_unpaid';
 }
 
+function mapMugglePayStatusToPaymentStatus(mugglePayStatus: string): PaymentStatus {
+  const statusMap: Record<string, PaymentStatus> = {
+    'NEW': 'payment_unpaid',
+    'PENDING': 'payment_started',
+    'PAID': 'payment_completed',
+    'EXPIRED': 'payment_bounced',
+    'CANCELLED': 'payment_bounced',
+    'FAILED': 'payment_bounced',
+  };
+
+  return statusMap[mugglePayStatus] || 'payment_unpaid';
+}
+
 function mapPaymentManagerStatusToPaymentStatus(paymentManagerStatus: string): PaymentStatus {
   const statusMap: Record<string, PaymentStatus> = {
     payment_unpaid: 'payment_unpaid',
@@ -368,6 +501,7 @@ function isValidWebhookToken(provider: string | null, token: string): boolean {
   const expectedTokens: Record<string, string> = {
     daimo: Deno.env.get('DAIMO_WEBHOOK_TOKEN') || 'daimo-webhook-token',
     aqua: Deno.env.get('AQUA_WEBHOOK_TOKEN') || 'aqua-webhook-token',
+    mugglepay: Deno.env.get('MUGGLEPAY_WEBHOOK_TOKEN') || 'mugglepay-webhook-token',
     'payment-manager':
       Deno.env.get('PAYMENT_MANAGER_WEBHOOK_TOKEN') || 'payment-manager-webhook-token',
   };
