@@ -42,7 +42,15 @@ export const solana: Chain = {
   alchemyNetwork: Network.SOLANA_MAINNET,
 };
 
-export const supportedChains: Chain[] = [base, polygon, arbitrum, solana];
+export const bsc: Chain = {
+  type: "evm",
+  chainId: 56,
+  name: "BNB Smart Chain",
+  cctpDomain: null,
+  alchemyNetwork: Network.BNB_MAINNET,
+};
+
+export const supportedChains: Chain[] = [base, polygon, arbitrum, solana, bsc];
 
 export function token({
   chainId,
