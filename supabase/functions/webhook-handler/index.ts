@@ -256,7 +256,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
         const originalRequest = payment.original_request;
         const metadata = originalRequest.metadata || {};
         const display = originalRequest.display || {};
-        
+
         // Extract required fields
         const amountLocal = metadata.amount_local;
         const currencyLocal = metadata.currency_local;
@@ -264,14 +264,14 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
         const priceAmount = display.paymentValue || originalRequest.amount || payment.amount;
         const orderId = payment.id;
         const merchantOrderId = payment.id; // Use payment.id as merchant_order_id since order_id doesn't exist
-        
+
         // Get evm address from destination
         // TODO: add evmAddress for cashback points
         const evmAddress = webhookData.payment.source?.payerAddress;
-        
+
         // Extract handle from appId (format: "rozoRewards-zen")
         const appId = originalRequest.appId || '';
-        const toHandle = appId.includes('-') ? appId.split('-')[1] : (metadata.to_handle );
+        const toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
 
         if (payment.status === 'payment_completed') {
           /**
@@ -291,7 +291,12 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
               merchant_order_id: merchantOrderId,
               evm_address: evmAddress,
             };
-            console.log('[RozoRewards-WebhookHandler] Sending to rozorewards API:', { paymentId: externalRef, payload: rozorewardsPayload, appId, toHandle });
+            console.log('[RozoRewards-WebhookHandler] Sending to rozorewards API:', {
+              paymentId: externalRef,
+              appId,
+              toHandle,
+              payload: rozorewardsPayload,
+            });
 
             // Make POST request to rozorewards API
             const response = await fetch(`${Deno.env.get('ROZOREWARD_API')}/rozorewards`, {
@@ -301,12 +306,30 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
             });
 
             if (!response.ok) {
-              console.error('[RozoRewards-WebhookHandler] Failed to send to rozorewards API:', { status: response.status, statusText: response.statusText, paymentId: externalRef });
+              console.error('[RozoRewards-WebhookHandler] Failed to send to rozorewards API:', {
+                status: response.status,
+                statusText: response.statusText,
+                paymentId: externalRef,
+              });
             } else {
               const responseData = await response.json();
-              console.log('[RozoRewards-WebhookHandler] Successfully sent to rozorewards API:', { paymentId: externalRef, response: responseData });
+              console.log('[RozoRewards-WebhookHandler] Successfully sent to rozorewards API:', {
+                paymentId: externalRef,
+                response: responseData,
+              });
             }
           } else if (appId.includes('rozoApp')) {
+            const txHash =
+              'transaction_hash' in webhookData.payment.metadata
+                ? webhookData.payment.metadata.transaction_hash
+                : null;
+            const chainId =
+              'payinchainid' in webhookData.payment ? webhookData.payment.payinchainid : null;
+            const tokenAddress =
+              'payintokenaddress' in webhookData.payment
+                ? webhookData.payment.payintokenaddress
+                : null;
+
             // Prepare Rozo App API payload
             const payload = {
               type: 'payment_completed',
@@ -316,15 +339,19 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 externalId: externalRef,
                 source: {
                   payerAddress: evmAddress,
-                  txHash: "",
-                  chainId: "",
+                  txHash: txHash,
+                  chainId: chainId,
                   amountUnits: priceAmount,
                   tokenSymbol: priceCurrency,
-                  tokenAddress: "",
-                }
-              }
+                  tokenAddress: tokenAddress,
+                },
+              },
             };
-            console.log('[RozoApp-WebhookHandler] Sending to rozorewards API:', { paymentId: externalRef, payload, appId, toHandle });
+            console.log('[RozoApp-WebhookHandler] Sending to rozorewards API:', {
+              paymentId: externalRef,
+              appId,
+              payload,
+            });
 
             // Make POST request to Rozo App API
             const response = await fetch(`${Deno.env.get('ROZO_APP_CALLBACK_URL')}`, {
@@ -334,15 +361,25 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
             });
 
             if (!response.ok) {
-              console.error('[RozoApp-WebhookHandler] Failed to send to rozorewards API:', { status: response.status, statusText: response.statusText, paymentId: externalRef });
+              console.error('[RozoApp-WebhookHandler] Failed to send to rozorewards API:', {
+                status: response.status,
+                statusText: response.statusText,
+                paymentId: externalRef,
+              });
             } else {
               const responseData = await response.json();
-              console.log('[RozoApp-WebhookHandler] Successfully sent to rozorewards API:', { paymentId: externalRef, response: responseData });
+              console.log('[RozoApp-WebhookHandler] Successfully sent to rozorewards API:', {
+                paymentId: externalRef,
+                response: responseData,
+              });
             }
           }
         }
       } catch (error) {
-        console.error('[WebhookHandler] Error sending to API:', { paymentId: externalRef, error: error instanceof Error ? error.message : String(error) });
+        console.error('[WebhookHandler] Error sending to API:', {
+          paymentId: externalRef,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
