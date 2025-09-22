@@ -318,7 +318,14 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 response: responseData,
               });
             }
-          } else if (appId.includes('rozoApp')) {
+
+            return;
+          }
+
+          /**
+           * Dynamic callback URL
+           */
+          if (payment.callback_url) {
             const txHash =
               'transaction_hash' in webhookData.payment.metadata
                 ? webhookData.payment.metadata.transaction_hash
@@ -354,7 +361,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
             });
 
             // Make POST request to Rozo App API
-            const response = await fetch(`${Deno.env.get('ROZO_APP_CALLBACK_URL')}`, {
+            const response = await fetch(payment.callback_url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),

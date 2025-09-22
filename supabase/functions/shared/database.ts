@@ -1,7 +1,7 @@
 // Payment Database for Edge Functions
 // Handles all database operations with Supabase integration
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0';
-import type { PaymentRequest, PaymentResponse, PaymentRecord } from './types.ts';
+import type { PaymentRecord, PaymentRequest, PaymentResponse } from './types.ts';
 
 // Initialize Supabase client for Edge Functions
 export function createSupabaseClient() {
@@ -50,6 +50,7 @@ export class PaymentDatabase {
         },
       },
       original_request: paymentRequest,
+      callback_url: paymentRequest.callbackUrl,
     };
 
     const { data, error } = await this.supabase
