@@ -274,58 +274,13 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
         const toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
 
         if (payment.status === 'payment_completed') {
-          /**
-           * Rozo Rewards
-           */
-          if (priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle) {
-            // Prepare Rozo Rewards API payload
-            const rozorewardsPayload = {
-              status: 'PAID',
-              price_amount: parseFloat(priceAmount),
-              price_currency: priceCurrency,
-              amount_local: amountLocal,
-              currency_local: currencyLocal,
-              to_handle: toHandle,
-              rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
-              order_id: orderId,
-              merchant_order_id: merchantOrderId,
-              evm_address: evmAddress,
-            };
-            console.log('[RozoRewards-WebhookHandler] Sending to rozorewards API:', {
-              paymentId: externalRef,
-              appId,
-              toHandle,
-              payload: rozorewardsPayload,
-            });
-
-            // Make POST request to rozorewards API
-            const response = await fetch(`${Deno.env.get('ROZOREWARD_API')}/rozorewards`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(rozorewardsPayload),
-            });
-
-            if (!response.ok) {
-              console.error('[RozoRewards-WebhookHandler] Failed to send to rozorewards API:', {
-                status: response.status,
-                statusText: response.statusText,
-                paymentId: externalRef,
-              });
-            } else {
-              const responseData = await response.json();
-              console.log('[RozoRewards-WebhookHandler] Successfully sent to rozorewards API:', {
-                paymentId: externalRef,
-                response: responseData,
-              });
-            }
-
-            return;
-          }
 
           /**
            * Dynamic callback URL
            */
-          if (payment.callback_url) {
+          const isRewards = priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle;
+
+          if (payment.callback_url || isRewards) {
             const txHash =
               'transaction_hash' in webhookData.payment.metadata
                 ? webhookData.payment.metadata.transaction_hash
@@ -341,7 +296,8 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
             const merchantToken = metadata.merchantToken || null;
             
             // Prepare Rozo App API payload
-            const payload = {
+            let callbackUrl = payment.callback_url;
+            let payload = {
               type: 'payment_completed',
               paymentId: orderId,
               metadata,
@@ -358,28 +314,44 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 },
               },
             };
-            console.log('[RozoApp-WebhookHandler] Sending to rozorewards API:', {
+            if (isRewards) {
+              callbackUrl = `${Deno.env.get('ROZOREWARD_API')}/rozorewards`;
+              payload = {
+                status: 'PAID',
+                price_amount: parseFloat(priceAmount),
+                price_currency: priceCurrency,
+                amount_local: amountLocal,
+                currency_local: currencyLocal,
+                to_handle: toHandle,
+                rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
+                order_id: orderId,
+                merchant_order_id: merchantOrderId,
+                evm_address: evmAddress,
+              };
+            }
+
+            console.log('[RozoApp-WebhookHandler] Sending to API:', {
               paymentId: externalRef,
               appId,
               payload,
             });
 
             // Make POST request to Rozo App API
-            const response = await fetch(payment.callback_url, {
+            const response = await fetch(callbackUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
             });
 
             if (!response.ok) {
-              console.error('[RozoApp-WebhookHandler] Failed to send to rozorewards API:', {
+              console.error('[RozoApp-WebhookHandler] Failed to send to API:', {
                 status: response.status,
                 statusText: response.statusText,
                 paymentId: externalRef,
               });
             } else {
               const responseData = await response.json();
-              console.log('[RozoApp-WebhookHandler] Successfully sent to rozorewards API:', {
+              console.log('[RozoApp-WebhookHandler] Successfully sent to API:', {
                 paymentId: externalRef,
                 response: responseData,
               });
