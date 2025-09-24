@@ -5,6 +5,7 @@ export interface PaymentRequest {
   display: {
     intent: string;
     currency: string;
+    paymentValue?: string; // Amount to be paid (different from withdrawal amount)
   };
   preferredChain: string; // Chain for payment processing routing (e.g., "10", "10001")
   preferredToken: string; // Token for payment processing (e.g., "USDC", "USDC_XLM", "XLM")
@@ -140,6 +141,29 @@ export interface PaymentManagerWebhookEvent {
     externalId: string | null;
     metadata: any | null;
   };
+}
+
+export interface MugglePayWebhookEvent {
+  order_id: string;
+  merchant_order_id: string;
+  status: 'NEW' | 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'FAILED';
+  price_amount: number;
+  price_currency: string;
+  pay_amount?: number;
+  pay_currency: string;
+  txid?: string;
+  created_at: string;
+  updated_at: string;
+  paid_at?: string;
+  network?: string;
+  address?: string;
+  from_address?: string;
+  title: string;
+  description?: string;
+  callback_url: string;
+  success_url: string;
+  cancel_url: string;
+  metadata?: Record<string, any>;
 }
 
 // Withdrawal API types

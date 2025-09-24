@@ -3,6 +3,7 @@
 import { PROVIDER_CONFIG, getProviderForChain } from './provider-config.ts';
 import { AquaProvider } from './providers/aqua-provider.ts';
 import { DaimoProvider } from './providers/daimo-provider.ts';
+import { MugglePayProvider } from './providers/mugglepay-provider.ts';
 import { PaymentManagerProvider } from './providers/payment-manager-provider.ts';
 import type { ChainConfig, PaymentRequest, PaymentResponse, ProviderConfig } from './types.ts';
 
@@ -45,7 +46,7 @@ const CHAIN_CONFIGS: ChainConfig[] = [
 ];
 
 export class PaymentRouter {
-  private providers: Map<string, DaimoProvider | AquaProvider | PaymentManagerProvider>;
+  private providers: Map<string, DaimoProvider | AquaProvider | MugglePayProvider | PaymentManagerProvider>;
 
   constructor() {
     this.providers = new Map();
@@ -65,6 +66,9 @@ export class PaymentRouter {
             break;
           case 'aqua':
             this.providers.set(name, new AquaProvider(config as ProviderConfig));
+            break;
+          case 'mugglepay':
+            this.providers.set(name, new MugglePayProvider(config as ProviderConfig));
             break;
         }
       }
@@ -145,6 +149,9 @@ export class PaymentRouter {
       case 'aqua':
         this.validateAquaRequest(paymentData);
         break;
+      case 'mugglepay':
+        this.validateMugglePayRequest(paymentData);
+        break;
       default:
         throw new Error(`Unknown provider: ${providerName}`);
     }
@@ -177,6 +184,26 @@ export class PaymentRouter {
     const supportedTokens = ['XLM', 'USDC_XLM'];
     if (!supportedTokens.includes(paymentData.preferredToken)) {
       throw new Error(`Aqua does not support token: ${paymentData.preferredToken}`);
+    }
+  }
+
+  private validateMugglePayRequest(paymentData: PaymentRequest): void {
+    // MugglePay supports BSC (56), Ethereum (1), and Polygon (137)
+    const supportedChains = ['56', '1', '137'];
+    if (!supportedChains.includes(paymentData.preferredChain)) {
+      throw new Error(`MugglePay does not support chain ID: ${paymentData.preferredChain}`);
+    }
+
+    // Validate token based on chain
+    const supportedTokensByChain: Record<string, string[]> = {
+      '56': ['USDT', 'USDC', 'BNB'], // BSC
+      '1': ['USDT', 'USDC', 'ETH'],   // Ethereum
+      '137': ['USDT', 'USDC', 'MATIC'], // Polygon
+    };
+
+    const supportedTokens = supportedTokensByChain[paymentData.preferredChain] || [];
+    if (!supportedTokens.includes(paymentData.preferredToken)) {
+      throw new Error(`MugglePay does not support token: ${paymentData.preferredToken} on chain: ${paymentData.preferredChain}`);
     }
   }
 
