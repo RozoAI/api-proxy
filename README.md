@@ -51,6 +51,7 @@ Content-Type: application/json
 | `metadata` | Object | No | Additional metadata |
 | `metadata.orderId` | String | No | Your internal order ID |
 | `metadata.externalId` | String | No | External reference ID |
+| `metadata.merchantToken` | String | No | Your secret token for webhook verification (not returned in responses) |
 | `callbackUrl` | String | No | Webhook URL for payment status updates |
 
 #### Example Request
@@ -73,7 +74,8 @@ curl -X POST https://intentapiv2.rozo.ai/functions/v1/payment \
     },
     "metadata": {
       "orderId": "order_123456",
-      "userId": "user_789"
+      "userId": "user_789",
+      "merchantToken": "your-secret-token-abc123"
     },
     "callbackUrl": "https://your-app.com/webhooks/payment-status"
   }'
@@ -147,6 +149,7 @@ curl https://intentapiv2.rozo.ai/functions/v1/payment/id/5941be78-9442-479f-8af7
     "metadata": {
       "orderId": "order_123456",
       "userId": "user_789"
+      // Note: merchantToken is NOT returned in API responses for security
     }
   }
 }
@@ -227,21 +230,91 @@ X-Rozo-Signature: sha256=<signature>
 | `payment.bounced` | Payment returned/bounced |
 | `payment.refunded` | Payment refunded |
 
-### Webhook Security
+### Webhook Security with Merchant Token
 
-To verify webhook authenticity, validate the `X-Rozo-Signature` header:
+To ensure webhook authenticity, merchants can include their own `merchantToken` in the payment request metadata. This token will be returned in the webhook payload, allowing merchants to verify that the webhook is legitimate and comes from Rozo.
+
+**Important Security Note**: The `merchantToken` is NEVER returned in API responses (create payment response or get payment status). It is ONLY included in webhook callbacks to your specified `callbackUrl`. This ensures the token remains secure and cannot be accessed by anyone querying the payment status.
+
+#### Including Merchant Token in Payment Request
+
+When creating a payment, merchants generate their own secret token and include it:
+
+```json
+{
+  "metadata": {
+    "merchantToken": "merchant-generated-secret-abc123",
+    "orderId": "order_123456"
+  }
+}
+```
+
+#### Webhook Payload with Merchant Token
+
+When we send a webhook to your `callbackUrl`, the payload will include your merchant token:
+
+```json
+{
+  "type": "payment_completed",
+  "paymentId": "payment_id",
+  "merchantToken": "your-secret-token-abc123",
+  "metadata": {
+    "orderId": "order_123456",
+    "userId": "user_789",
+    "merchantToken": "your-secret-token-abc123"
+  },
+  "payment": {
+    "externalId": "external_ref",
+    "source": {
+      "payerAddress": "0x...",
+      "txHash": "0x...",
+      "chainId": "1",
+      "amountUnits": "10.00",
+      "tokenSymbol": "USDC",
+      "tokenAddress": "0x..."
+    }
+  }
+}
+```
+
+#### Verification Example
 
 ```javascript
-const crypto = require('crypto');
+// The merchant stores the token they sent with the payment request
+const merchantTokensDB = {
+  'order_123456': 'merchant-generated-secret-abc123',
+  'order_789012': 'another-merchant-secret-xyz789'
+};
 
-function verifyWebhookSignature(payload, signature, secret) {
-  const expectedSignature = 'sha256=' + 
-    crypto.createHmac('sha256', secret)
-    .update(JSON.stringify(payload))
-    .digest('hex');
+function verifyWebhook(webhookPayload) {
+  const orderId = webhookPayload.metadata.orderId;
+  const expectedToken = merchantTokensDB[orderId];
   
-  return signature === expectedSignature;
+  // Check if the merchantToken matches what was sent during payment creation
+  if (webhookPayload.merchantToken !== expectedToken) {
+    console.error('Invalid merchant token - webhook may be fraudulent');
+    return false;
+  }
+  
+  // Token is valid, process the webhook
+  console.log('Webhook verified successfully');
+  return true;
 }
+
+// In your webhook handler
+app.post('/webhooks/payment', (req, res) => {
+  const payload = req.body;
+  
+  if (!verifyWebhook(payload)) {
+    return res.status(401).send('Unauthorized');
+  }
+  
+  // Process the payment update
+  console.log('Payment status:', payload.type);
+  console.log('Payment ID:', payload.paymentId);
+  
+  res.status(200).send('OK');
+});
 ```
 
 ## Payment Status Flow
@@ -308,6 +381,11 @@ async function getPaymentStatus(paymentId) {
   }
 }
 
+// Helper function to generate a secure random token
+function generateSecureToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
 // Example usage
 async function main() {
   const payment = await createPayment({
@@ -324,7 +402,8 @@ async function main() {
       tokenSymbol: 'USDC_XLM'
     },
     metadata: {
-      orderId: 'order_' + Date.now()
+      orderId: 'order_' + Date.now(),
+      merchantToken: generateSecureToken() // Merchant generates their own token
     },
     callbackUrl: 'https://your-app.com/webhooks/payment'
   });

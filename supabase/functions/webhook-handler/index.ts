@@ -337,11 +337,15 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 ? webhookData.payment.payintokenaddress
                 : null;
 
+            // Extract merchantToken from metadata if provided
+            const merchantToken = metadata.merchantToken || null;
+            
             // Prepare Rozo App API payload
             const payload = {
               type: 'payment_completed',
               paymentId: orderId,
               metadata,
+              merchantToken, // Include merchant token for verification
               payment: {
                 externalId: externalRef,
                 source: {

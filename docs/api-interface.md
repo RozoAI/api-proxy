@@ -64,6 +64,7 @@ This document provides detailed API specifications for all Supabase Edge Functio
 | `metadata`                       | object | ❌       | Additional payment metadata                                              |
 | `metadata.webhookUrl`            | string | ❌       | Custom webhook URL for payment notifications                             |
 | `metadata.externalId`            | string | ❌       | External reference ID for the payment                                    |
+| `metadata.merchantToken`         | string | ❌       | Merchant token for webhook verification (included in callback payload)   |
 
 **🔄 Payment Manager Architecture**:
 
@@ -404,15 +405,45 @@ curl -X POST /functions/v1/payment-api \
 
 ### Webhook Authentication
 
-#### Daimo Webhooks
+#### Merchant Token Verification
 
+When creating a payment, merchants can include a `merchantToken` in the metadata:
+
+```json
+{
+  "metadata": {
+    "merchantToken": "your-secret-token-here",
+    "orderId": "12345"
+  }
+}
+```
+
+This token will be included in the webhook callback payload sent to your `callback_url`:
+
+```json
+{
+  "type": "payment_completed",
+  "paymentId": "payment_id",
+  "merchantToken": "your-secret-token-here",
+  "metadata": { ... },
+  "payment": { ... }
+}
+```
+
+Merchants should verify this token matches what they provided during payment creation to ensure the webhook is authentic.
+
+#### Provider Webhooks
+
+**Daimo Webhooks**
 - Signature verification using `X-Daimo-Signature` header
 - Token-based authentication via query parameter
 
-#### Aqua Webhooks
-
+**Aqua Webhooks**
 - Token-based authentication via query parameter
 - No signature verification required
+
+**Payment Manager Webhooks**
+- Token-based authentication via query parameter
 
 ## 🚦 Rate Limiting
 
@@ -531,7 +562,8 @@ curl -X POST https://your-project.supabase.co/functions/v1/payment-api \
     },
     "metadata": {
       "orderId": "coffee_001",
-      "customerId": "cust_123"
+      "customerId": "cust_123",
+      "merchantToken": "merchant-secret-token-123"
     }
   }'
 ```
