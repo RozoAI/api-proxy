@@ -265,9 +265,8 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
         const orderId = payment.id;
         const merchantOrderId = payment.id; // Use payment.id as merchant_order_id since order_id doesn't exist
 
-        // Get evm address from destination
-        // TODO: add evmAddress for cashback points
-        const evmAddress = webhookData.payment.source?.payerAddress;
+        // Get evm address from metadata
+        const evmAddress = webhookData.payment.metadata?.from_address;
 
         // Extract handle from appId (format: "rozoRewards-zen")
         const appId = originalRequest.appId || '';
