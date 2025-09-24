@@ -8,6 +8,7 @@ import type {
   ProviderHealth,
 } from '../types.ts';
 import { BaseProvider } from './base-provider.ts';
+import { safeMetadataSpread } from '../utils.ts';
 
 export class PaymentManagerProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
@@ -157,7 +158,7 @@ export class PaymentManagerProvider extends BaseProvider {
       },
       externalId: payment.externalId || payment.external_id,
       metadata: {
-        ...payment.metadata,
+        ...safeMetadataSpread(payment.metadata),
         provider: 'payment-manager',
         receivingAddress: payment.receivingAddress,
         memo: payment.memo,

@@ -8,6 +8,7 @@ import type {
   ProviderConfig,
   ProviderHealth,
 } from '../types.ts';
+import { safeMetadataSpread } from '../utils.ts';
 
 export class AquaProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
@@ -203,8 +204,8 @@ export class AquaProvider extends BaseProvider {
       },
       externalId: aquaResponse.metadata?.daimo_external_id || aquaResponse.invoice_id || null,
       metadata: {
-        ...originalRequest?.metadata,
-        ...aquaResponse.metadata?.original_metadata,
+        ...safeMetadataSpread(originalRequest?.metadata),
+        ...safeMetadataSpread(aquaResponse.metadata?.original_metadata),
         aqua_invoice_id: aquaResponse.invoice_id,
         aqua_mode: 'default',
         aqua_token_id: aquaResponse.token_id,

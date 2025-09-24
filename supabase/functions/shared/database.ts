@@ -2,6 +2,7 @@
 // Handles all database operations with Supabase integration
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0';
 import type { PaymentRecord, PaymentRequest, PaymentResponse } from './types.ts';
+import { safeMetadataSpread } from './utils.ts';
 
 // Initialize Supabase client for Edge Functions
 export function createSupabaseClient() {
@@ -284,7 +285,7 @@ export class PaymentDatabase {
       },
       externalId: record.external_id,
       metadata: {
-        ...record.metadata,
+        ...safeMetadataSpread(record.metadata),
         provider: record.provider_name,
         preferred_chain: record.metadata?.preferred_chain || record.chain_id,
         preferred_token: record.metadata?.preferred_token,

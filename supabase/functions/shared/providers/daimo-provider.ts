@@ -8,6 +8,7 @@ import type {
   ProviderHealth,
 } from '../types.ts';
 import { BaseProvider } from './base-provider.ts';
+import { safeMetadataSpread } from '../utils.ts';
 
 export class DaimoProvider extends BaseProvider {
   constructor(config: ProviderConfig) {
@@ -226,7 +227,7 @@ export class DaimoProvider extends BaseProvider {
       },
       externalId: payment.externalId || null,
       metadata: {
-        ...payment.metadata,
+        ...safeMetadataSpread(payment.metadata),
         provider: 'daimo',
         preferred_chain: originalRequest?.preferredChain || payment.metadata?.preferred_chain,
         preferred_token: originalRequest?.preferredToken || payment.metadata?.preferred_token,
