@@ -12,6 +12,7 @@ export interface PaymentRequest {
   receivingAddress?: string; // Optional: explicit receiving address for provider (e.g., Payment Manager)
   destination: PaymentDestination; // For withdrawal after payment completion
   metadata?: Record<string, any>;
+  callbackUrl?: string;
 }
 
 export interface PaymentDestination {
@@ -85,6 +86,7 @@ export interface PaymentRecord {
   source_tx_hash?: string;
   // Withdrawal transaction details
   withdrawal_tx_hash?: string;
+  callback_url?: string;
 }
 
 // Webhook types

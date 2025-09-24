@@ -20,6 +20,7 @@ export class PaymentService {
       preferredTokenAddress: paymentData.preferredTokenAddress,
       withdrawalAddress: paymentData.destination.destinationAddress,
       withdrawalAmount: paymentData.destination.amountUnits,
+      callbackUrl: paymentData.callbackUrl,
     });
 
     // Route to appropriate provider based on preferred chain
