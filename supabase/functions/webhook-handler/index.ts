@@ -278,8 +278,8 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
            * Dynamic callback URL
            */
           const isRewards = priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle;
-
-          if (payment.callback_url || isRewards) {
+          const isRozoBanana = appId.includes("rozoBanana");
+          if (payment.callback_url || isRewards || isRozoBanana) {
             const txHash =
               'transaction_hash' in webhookData.payment.metadata
                 ? webhookData.payment.metadata.transaction_hash
@@ -313,6 +313,33 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 },
               },
             };
+            // Prepare headers for POST request
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            
+            if (isRozoBanana) {
+              callbackUrl = `${Deno.env.get('ROZOBANANA_API')}`;
+
+              const bananaToken = Deno.env.get('ROZOBANANA_TOKEN');
+              headers['Authorization'] = `Token ${bananaToken}`;
+              if (!bananaToken) {
+                console.warn('[RozoApp-WebhookHandler] ROZOBANANA_TOKEN not configured');
+              }
+              // Add rozoBanana specific payload format
+              payload = {
+                order_id: orderId,
+                merchant_order_id: merchantOrderId,
+                price_amount: parseFloat(priceAmount),
+                price_currency: priceCurrency,
+                pay_amount: parseFloat(priceAmount),
+                pay_currency: priceCurrency,
+                status: 'PAID',
+                created_at: new Date().toISOString(),
+                meta: {
+                  user_address: evmAddress,
+                  plan_type: metadata.plan_type || 'monthly'
+                }
+              };
+            }
             if (isRewards) {
               callbackUrl = `${Deno.env.get('ROZOREWARD_API')}/rozorewards`;
               payload = {
@@ -338,7 +365,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
             // Make POST request to Rozo App API
             const response = await fetch(callbackUrl, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers,
               body: JSON.stringify(payload),
             });
 
