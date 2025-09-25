@@ -246,71 +246,19 @@ async function handleMugglePayWebhook(webhookData: MugglePayWebhookEvent): Promi
       provider_response: webhookData,
     });
 
-    // If payment is completed, trigger withdrawal integration or rewards processing
+    // If payment is completed, process callbacks and withdrawal integration
     if (status === 'payment_completed') {
-      console.log(`[WebhookHandler] MugglePay payment completed, processing rewards/withdrawal for: ${existingPayment.id}`);
+      console.log(`[WebhookHandler] MugglePay payment completed, processing callbacks/withdrawal for: ${existingPayment.id}`);
       
-      // Get updated payment data for rewards processing
+      // Get updated payment data for callback processing
       const payment = await db.getPaymentByExternalId(existingPayment.external_id!);
-      if (payment && payment.original_request) {
-        try {
-          const originalRequest = payment.original_request;
-          const metadata = originalRequest.metadata || {};
-          const display = originalRequest.display || {};
-          
-          // Extract required fields for rewards processing
-          const amountLocal = metadata.amount_local;
-          const currencyLocal = metadata.currency_local;
-          const priceCurrency = display.currency || webhookData.price_currency || 'USD';
-          const priceAmount = display.paymentValue || webhookData.price_amount;
-          const orderId = payment.id;
-          const merchantOrderId = webhookData.merchant_order_id;
-          
-          // Get evm address from webhook (payer address)
-          const evmAddress = webhookData.from_address;
-          
-          // Extract handle from appId
-          const appId = originalRequest.appId || '';
-          const toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
+      if (payment) {
+        // Use unified callback processing function
+        await processPaymentCallback(payment, webhookData, 'mugglepay');
 
-          // Prepare rozorewards API payload if this is a rewards payment
-          if (appId.includes('rozoRewards') && toHandle && priceCurrency === 'USD') {
-            const rozorewardsPayload = {
-              status: 'PAID',
-              price_amount: parseFloat(priceAmount?.toString() || '0'),
-              price_currency: priceCurrency,
-              amount_local: amountLocal,
-              currency_local: currencyLocal,
-              to_handle: toHandle,
-              rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
-              order_id: orderId,
-              merchant_order_id: merchantOrderId,
-              evm_address: evmAddress,
-            };
-
-            console.log('[WebhookHandler] Sending MugglePay payment to rozorewards API:', { paymentId: existingPayment.external_id, payload: rozorewardsPayload, appId, toHandle });
-
-            // Make POST request to rozorewards API
-            const response = await fetch(`${Deno.env.get('ROZOREWARD_API')}/rozorewards`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(rozorewardsPayload),
-            });
-            
-            if (!response.ok) {
-              console.error('[WebhookHandler] Failed to send MugglePay payment to rozorewards API:', { status: response.status, statusText: response.statusText, paymentId: existingPayment.external_id });
-            } else {
-              const responseData = await response.json();
-              console.log('[WebhookHandler] Successfully sent MugglePay payment to rozorewards API:', { paymentId: existingPayment.external_id, response: responseData });
-            }
-          }
-
-          // Trigger withdrawal integration if enabled
-          if (Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true') {
-            await triggerWithdrawalIntegration(existingPayment.id);
-          }
-        } catch (error) {
-          console.error('[WebhookHandler] Error processing MugglePay rewards/withdrawal:', { paymentId: existingPayment.external_id, error: error instanceof Error ? error.message : String(error) });
+        // Trigger withdrawal integration if enabled
+        if (Deno.env.get('WITHDRAWAL_INTEGRATION_ENABLED') === 'true') {
+          await triggerWithdrawalIntegration(existingPayment.id);
         }
       }
     }
@@ -369,146 +317,12 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
       webhookData: webhookData,
     });
 
-    // Get payment data to extract information for rozorewards API
-    const payment = await db.getPaymentByExternalId(externalRef);
-    if (payment && payment.original_request) {
-      try {
-        const originalRequest = payment.original_request;
-        const metadata = originalRequest.metadata || {};
-        const display = originalRequest.display || {};
-
-        // Extract required fields
-        const amountLocal = metadata.amount_local;
-        const currencyLocal = metadata.currency_local;
-        const priceCurrency = display.currency || 'USD';
-        const priceAmount = display.paymentValue || originalRequest.amount || payment.amount;
-        const orderId = payment.id;
-        const merchantOrderId = payment.id; // Use payment.id as merchant_order_id since order_id doesn't exist
-
-        // Get evm address from metadata
-        const evmAddress = webhookData.payment.metadata?.from_address;
-
-        // Extract handle from appId (format: "rozoRewards-zen")
-        const appId = originalRequest.appId || '';
-        const toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
-
-        if (payment.status === 'payment_completed') {
-
-          /**
-           * Dynamic callback URL
-           */
-          const isRewards = priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle;
-          const isRozoBanana = appId.includes("rozoBanana");
-          if (payment.callback_url || isRewards || isRozoBanana) {
-            const txHash =
-              'transaction_hash' in webhookData.payment.metadata
-                ? webhookData.payment.metadata.transaction_hash
-                : null;
-            const chainId =
-              'payinchainid' in webhookData.payment ? webhookData.payment.payinchainid : null;
-            const tokenAddress =
-              'payintokenaddress' in webhookData.payment
-                ? webhookData.payment.payintokenaddress
-                : null;
-
-            // Extract merchantToken from metadata if provided
-            const merchantToken = metadata.merchantToken || null;
-            
-            // Prepare Rozo App API payload
-            let callbackUrl = payment.callback_url;
-            let payload = {
-              type: 'payment_completed',
-              paymentId: orderId,
-              metadata,
-              merchantToken, // Include merchant token for verification
-              payment: {
-                externalId: externalRef,
-                source: {
-                  payerAddress: evmAddress,
-                  txHash: txHash,
-                  chainId: chainId,
-                  amountUnits: priceAmount,
-                  tokenSymbol: priceCurrency,
-                  tokenAddress: tokenAddress,
-                },
-              },
-            };
-            // Prepare headers for POST request
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            
-            if (isRozoBanana) {
-              callbackUrl = `${Deno.env.get('ROZOBANANA_API')}`;
-
-              const bananaToken = Deno.env.get('ROZOBANANA_TOKEN');
-              headers['Authorization'] = `Token ${bananaToken}`;
-              if (!bananaToken) {
-                console.warn('[RozoApp-WebhookHandler] ROZOBANANA_TOKEN not configured');
-              }
-              // Add rozoBanana specific payload format
-              payload = {
-                order_id: orderId,
-                merchant_order_id: merchantOrderId,
-                price_amount: parseFloat(priceAmount),
-                price_currency: priceCurrency,
-                pay_amount: parseFloat(priceAmount),
-                pay_currency: priceCurrency,
-                status: 'PAID',
-                created_at: new Date().toISOString(),
-                meta: {
-                  user_address: evmAddress,
-                  plan_type: metadata.planId
-                }
-              };
-            }
-            if (isRewards) {
-              callbackUrl = `${Deno.env.get('ROZOREWARD_API')}/rozorewards`;
-              payload = {
-                status: 'PAID',
-                price_amount: parseFloat(priceAmount),
-                price_currency: priceCurrency,
-                amount_local: amountLocal,
-                currency_local: currencyLocal,
-                to_handle: toHandle,
-                rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
-                order_id: orderId,
-                merchant_order_id: merchantOrderId,
-                evm_address: evmAddress,
-              };
-            }
-
-            console.log('[RozoApp-WebhookHandler] Sending to API:', {
-              paymentId: externalRef,
-              appId,
-              payload,
-            });
-
-            // Make POST request to Rozo App API
-            const response = await fetch(callbackUrl, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-              console.error('[RozoApp-WebhookHandler] Failed to send to API:', {
-                status: response.status,
-                statusText: response.statusText,
-                paymentId: externalRef,
-              });
-            } else {
-              const responseData = await response.json();
-              console.log('[RozoApp-WebhookHandler] Successfully sent to API:', {
-                paymentId: externalRef,
-                response: responseData,
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('[WebhookHandler] Error sending to API:', {
-          paymentId: externalRef,
-          error: error instanceof Error ? error.message : String(error),
-        });
+    // Process callbacks if payment is completed
+    if (status === 'payment_completed') {
+      const payment = await db.getPaymentByExternalId(externalRef);
+      if (payment) {
+        // Use unified callback processing function
+        await processPaymentCallback(payment, webhookData, 'payment-manager');
       }
     }
 
@@ -591,6 +405,177 @@ function isValidWebhookToken(provider: string | null, token: string): boolean {
   };
 
   return expectedTokens[provider] === token;
+}
+
+/**
+ * Unified callback processing function that handles different webhook data formats
+ * Supports both PaymentManager and MugglePay webhook data structures
+ */
+async function processPaymentCallback(
+  payment: any,
+  webhookData: any,
+  webhookType: 'payment-manager' | 'mugglepay'
+): Promise<void> {
+  if (!payment || !payment.original_request) {
+    console.warn('[WebhookHandler] No payment or original_request found for callback processing');
+    return;
+  }
+
+  try {
+    const originalRequest = payment.original_request;
+    const metadata = originalRequest.metadata || {};
+    const display = originalRequest.display || {};
+
+    // Extract required fields based on webhook type
+    let amountLocal, currencyLocal, priceCurrency, priceAmount, orderId, merchantOrderId, evmAddress, toHandle, appId;
+
+    if (webhookType === 'payment-manager') {
+      amountLocal = metadata.amount_local;
+      currencyLocal = metadata.currency_local;
+      priceCurrency = display.currency || 'USD';
+      priceAmount = display.paymentValue || originalRequest.amount || payment.amount;
+      orderId = payment.id;
+      merchantOrderId = payment.id;
+      evmAddress = webhookData.payment.metadata?.from_address;
+      appId = originalRequest.appId || '';
+      toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
+    } else if (webhookType === 'mugglepay') {
+      amountLocal = metadata.amount_local;
+      currencyLocal = metadata.currency_local;
+      priceCurrency = display.currency || webhookData.price_currency || 'USD';
+      priceAmount = display.paymentValue || webhookData.price_amount;
+      orderId = payment.id;
+      merchantOrderId = webhookData.merchant_order_id;
+      evmAddress = webhookData.from_address;
+      appId = originalRequest.appId || '';
+      toHandle = appId.includes('-') ? appId.split('-')[1] : metadata.to_handle;
+    }
+
+    // Check if callback should be triggered
+    const isRewards = priceCurrency === 'USD' && appId.includes('rozoRewards') && toHandle;
+    const isRozoBanana = appId.includes("rozoBanana");
+    
+    if (payment.callback_url || isRewards || isRozoBanana) {
+      // Extract transaction details based on webhook type
+      let txHash, chainId, tokenAddress;
+      
+      if (webhookType === 'payment-manager') {
+        txHash = 'transaction_hash' in webhookData.payment.metadata
+          ? webhookData.payment.metadata.transaction_hash
+          : null;
+        chainId = 'payinchainid' in webhookData.payment ? webhookData.payment.payinchainid : null;
+        tokenAddress = 'payintokenaddress' in webhookData.payment
+          ? webhookData.payment.payintokenaddress
+          : null;
+      } else if (webhookType === 'mugglepay') {
+        txHash = webhookData.txid;
+        // MugglePay network mapping (could be made configurable via env vars)
+        // Currently supports USDT on BSC, but check webhook data for network info
+        chainId = webhookData.chain_id || webhookData.network === 'BSC' ? 56 : 56;
+        tokenAddress = webhookData.token_address || '0x55d398326f99059fF775485246999027B3197955'; // USDT on BSC
+      }
+
+      // Extract merchantToken from metadata if provided
+      const merchantToken = metadata.merchantToken || null;
+      
+      // Prepare callback URL and payload
+      let callbackUrl = payment.callback_url;
+      let payload: any = {
+        type: 'payment_completed',
+        paymentId: orderId,
+        metadata,
+        merchantToken,
+        payment: {
+          externalId: payment.external_id,
+          source: {
+            payerAddress: evmAddress,
+            txHash: txHash,
+            chainId: chainId,
+            amountUnits: priceAmount,
+            tokenSymbol: priceCurrency,
+            tokenAddress: tokenAddress,
+          },
+        },
+      };
+
+      // Prepare headers for POST request
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      
+      // Handle specific callback types
+      if (isRozoBanana) {
+        callbackUrl = `${Deno.env.get('ROZOBANANA_API')}`;
+        const bananaToken = Deno.env.get('ROZOBANANA_TOKEN');
+        headers['Authorization'] = `Token ${bananaToken}`;
+        if (!bananaToken) {
+          console.warn('[WebhookHandler] ROZOBANANA_TOKEN not configured');
+        }
+        payload = {
+          order_id: orderId,
+          merchant_order_id: merchantOrderId,
+          price_amount: parseFloat(priceAmount?.toString() || '0'),
+          price_currency: priceCurrency,
+          pay_amount: parseFloat(priceAmount?.toString() || '0'),
+          pay_currency: priceCurrency,
+          status: 'PAID',
+          created_at: new Date().toISOString(),
+          meta: {
+            user_address: evmAddress,
+            plan_type: metadata.planId
+          }
+        };
+      } else if (isRewards) {
+        callbackUrl = `${Deno.env.get('ROZOREWARD_API')}/rozorewards`;
+        payload = {
+          status: 'PAID',
+          price_amount: parseFloat(priceAmount?.toString() || '0'),
+          price_currency: priceCurrency,
+          amount_local: amountLocal,
+          currency_local: currencyLocal,
+          to_handle: toHandle,
+          rozoreward_token: Deno.env.get('ROZOREWARD_TOKEN'),
+          order_id: orderId,
+          merchant_order_id: merchantOrderId,
+          evm_address: evmAddress,
+        };
+      }
+
+      console.log('[WebhookHandler] Sending callback to API:', {
+        paymentId: payment.external_id,
+        appId,
+        webhookType,
+        payload,
+      });
+
+      // Make POST request to callback URL
+      const response = await fetch(callbackUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        console.error('[WebhookHandler] Failed to send callback to API:', {
+          status: response.status,
+          statusText: response.statusText,
+          paymentId: payment.external_id,
+          webhookType,
+        });
+      } else {
+        const responseData = await response.json();
+        console.log('[WebhookHandler] Successfully sent callback to API:', {
+          paymentId: payment.external_id,
+          webhookType,
+          response: responseData,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[WebhookHandler] Error processing payment callback:', {
+      paymentId: payment.external_id,
+      webhookType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function triggerWithdrawalIntegration(paymentId: string): Promise<void> {

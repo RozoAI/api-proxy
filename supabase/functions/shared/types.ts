@@ -152,6 +152,7 @@ export interface MugglePayWebhookEvent {
   pay_amount?: number;
   pay_currency: string;
   txid?: string;
+  transaction_hash?: string;
   created_at: string;
   updated_at: string;
   paid_at?: string;
