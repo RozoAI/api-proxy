@@ -276,6 +276,21 @@ export class PaymentDatabase {
     const originalRequest = record.original_request;
     const withdrawalDestination = record.metadata?.withdrawal_destination;
 
+    // Extract source address and tx hash from provider_response for MugglePay orders
+    let sourceAddress = record.source_address;
+    let sourceTxHash = record.source_tx_hash;
+
+    // For MugglePay orders, check provider_response for payment details
+    if (record.provider_name === 'mugglepay' && record.provider_response) {
+      // Extract from_address and transaction_hash from provider_response
+      if (record.provider_response.from_address) {
+        sourceAddress = record.provider_response.from_address;
+      }
+      if (record.provider_response.transaction_hash) {
+        sourceTxHash = record.provider_response.transaction_hash;
+      }
+    }
+
     return {
       id: record.external_id || record.id,
       status: record.status as any,
@@ -285,10 +300,10 @@ export class PaymentDatabase {
         currency: record.currency,
       },
       source:
-        record.source_address && record.source_tx_hash
+        sourceAddress && sourceTxHash
           ? {
-              payerAddress: record.source_address,
-              txHash: record.source_tx_hash,
+              payerAddress: sourceAddress,
+              txHash: sourceTxHash,
               chainId: record.chain_id,
               amountUnits: originalRequest?.destination?.amountUnits || record.amount.toString(),
               tokenSymbol: record.metadata?.preferred_token || '',
@@ -321,10 +336,12 @@ export class PaymentDatabase {
         withdrawal_destination: withdrawalDestination,
         withdraw_id: record.withdraw_id,
         withdrawal_tx_hash: record.withdrawal_tx_hash,
-        source_address: record.source_address,
-        source_tx_hash: record.source_tx_hash,
+        source_address: sourceAddress,
+        source_tx_hash: sourceTxHash,
         // Deposit expiration for Base chain payments
         deposit_expiration: record.metadata?.deposit_expiration,
+        // Include provider_response for MugglePay orders
+        // provider_response: record.provider_name === 'mugglepay' ? record.provider_response : undefined,
       },
     };
   }
