@@ -78,17 +78,42 @@ export class PaymentDatabase {
   }
 
   async getPaymentById(id: string): Promise<PaymentRecord | null> {
-    const { data, error } = await this.supabase.from('payments').select('*').eq('id', id).single();
+    // First try to find by internal ID
+    const { data: dataById, error: errorById } = await this.supabase
+      .from('payments')
+      .select('*')
+      .eq('id', id)
+      .single();
 
+    if (!errorById && dataById) {
+      return dataById;
+    }
+
+    // If not found by internal ID, try to find by external_id
+    const { data: dataByExternalId, error: errorByExternalId } = await this.supabase
+      .from('payments')
+      .select('*')
+      .eq('external_id', id)
+      .single();
+
+    if (!errorByExternalId && dataByExternalId) {
+      console.log('[Database] Found payment by external_id:', id);
+      return dataByExternalId;
+    }
+
+    // Record not found in either field
+    if (errorById?.code === 'PGRST116' || errorByExternalId?.code === 'PGRST116') {
+      return null;
+    }
+
+    // Other errors
+    const error = errorById || errorByExternalId;
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Record not found
-      }
       console.error('[Database] Error getting payment by ID:', error);
       throw new Error(`Failed to get payment: ${error.message}`);
     }
 
-    return data;
+    return null;
   }
 
   async getPaymentByExternalId(externalId: string): Promise<PaymentRecord | null> {
