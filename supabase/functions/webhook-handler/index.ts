@@ -336,7 +336,7 @@ async function handlePaymentManagerWebhook(webhookData: PaymentManagerWebhookEve
                 created_at: new Date().toISOString(),
                 meta: {
                   user_address: evmAddress,
-                  plan_type: metadata.plan_type || 'monthly'
+                  plan_type: metadata.planId
                 }
               };
             }
