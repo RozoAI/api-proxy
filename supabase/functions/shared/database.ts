@@ -282,12 +282,29 @@ export class PaymentDatabase {
 
     // For MugglePay orders, check provider_response for payment details
     if (record.provider_name === 'mugglepay' && record.provider_response) {
-      // Extract from_address and transaction_hash from provider_response
-      if (record.provider_response.from_address) {
-        sourceAddress = record.provider_response.from_address;
+      // Check both top-level and nested provider_response
+      const topLevel = record.provider_response;
+      const nested = record.provider_response.provider_response;
+
+      console.log('[Database] MugglePay payment - checking provider_response:', {
+        has_top_source_address: !!topLevel.source_address,
+        has_nested_from_address: !!nested?.from_address,
+        has_nested_transaction_hash: !!nested?.transaction_hash,
+        provider_response_keys: Object.keys(topLevel || {})
+      });
+
+      // First check top-level fields
+      if (topLevel.source_address) {
+        sourceAddress = topLevel.source_address;
       }
-      if (record.provider_response.transaction_hash) {
-        sourceTxHash = record.provider_response.transaction_hash;
+      // Then check nested provider_response
+      else if (nested?.from_address) {
+        sourceAddress = nested.from_address;
+      }
+
+      // Check for transaction hash in nested structure
+      if (nested?.transaction_hash) {
+        sourceTxHash = nested.transaction_hash;
       }
     }
 
@@ -340,8 +357,8 @@ export class PaymentDatabase {
         source_tx_hash: sourceTxHash,
         // Deposit expiration for Base chain payments
         deposit_expiration: record.metadata?.deposit_expiration,
-        // Include provider_response for MugglePay orders
-        // provider_response: record.provider_name === 'mugglepay' ? record.provider_response : undefined,
+        // Include provider_response for MugglePay orders (for debugging)
+        provider_response: record.provider_name === 'mugglepay' ? record.provider_response : undefined,
       },
     };
   }

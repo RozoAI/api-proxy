@@ -242,7 +242,7 @@ async function handleMugglePayWebhook(webhookData: MugglePayWebhookEvent): Promi
     // Update payment status and transaction details
     await db.updatePaymentStatus(existingPayment.external_id!, status, {
       source_address: webhookData.from_address,
-      source_tx_hash: webhookData.txid,
+      source_tx_hash: webhookData.transaction_hash || webhookData.txid,
       provider_response: webhookData,
     });
 
