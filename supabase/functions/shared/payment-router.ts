@@ -120,9 +120,30 @@ export class PaymentRouter {
     }
   }
 
+  async getPaymentByProvider(paymentId: string, providerName: string): Promise<PaymentResponse> {
+    const provider = this.providers.get(providerName);
+
+    if (!provider) {
+      throw new Error(`Provider ${providerName} not available`);
+    }
+
+    console.log(`[PaymentRouter] Getting payment ${paymentId} from provider ${providerName}`);
+
+    try {
+      return await provider.getPayment(paymentId);
+    } catch (error) {
+      console.error(`[PaymentRouter] Error getting payment with ${providerName}:`, error);
+      throw error;
+    }
+  }
+
   getProviderForChain(chainId: string): string {
     // Use the configuration helper function
     return getProviderForChain(chainId);
+  }
+
+  isProviderEnabled(providerName: string): boolean {
+    return this.providers.has(providerName);
   }
 
   private validatePaymentRequest(paymentData: PaymentRequest, providerName: string): void {

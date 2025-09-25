@@ -53,8 +53,9 @@ export class PaymentService {
           // Fetch fresh data from provider using the original preferred chain
           const originalRequest = cachedPayment.original_request;
           const preferredChain = originalRequest?.preferredChain || cachedPayment.chain_id;
+          const providerName = cachedPayment.provider_name || this.router.getProviderForChain(preferredChain);
 
-          const freshPayment = await this.router.getPayment(paymentId, preferredChain);
+          const freshPayment = await this.router.getPaymentByProvider(paymentId, providerName);
 
           // Update database with fresh data
           await this.db.updatePaymentStatus(paymentId, freshPayment.status);
@@ -73,8 +74,61 @@ export class PaymentService {
       return this.db.convertToPaymentResponse(cachedPayment);
     }
 
-    // Payment not in database, return not found
+    // Payment not in database, try each enabled provider
+    // Priority: Try MugglePay first for BSC/BNB payments, then Payment Manager
+    const providers = this.getPriorityProviders();
+
+    for (const provider of providers) {
+      try {
+        console.log(`[PaymentService] Trying to fetch payment ${paymentId} from ${provider}`);
+        const payment = await this.router.getPaymentByProvider(paymentId, provider);
+
+        // Save to database for future queries
+        if (payment) {
+          // Extract chain from payment response if available
+          const chainId = payment.metadata?.payinchainid || payment.source?.chainId || '56'; // Default to BSC if from MugglePay
+
+          const mockRequest: PaymentRequest = {
+            preferredChain: chainId,
+            preferredToken: payment.display?.currency || 'USDC',
+            display: payment.display,
+            destination: payment.destination,
+            metadata: payment.metadata,
+          };
+          await this.db.createPayment(mockRequest, payment, provider);
+
+          console.log(`[PaymentService] Successfully fetched payment from ${provider}`);
+          return payment;
+        }
+      } catch (error) {
+        console.log(`[PaymentService] Provider ${provider} failed for payment ${paymentId}:`, error);
+        // Continue to next provider
+      }
+    }
+
+    // Payment not found in any provider
     throw new Error('Payment not found');
+  }
+
+  private getPriorityProviders(): string[] {
+    // Return providers in priority order
+    // Try MugglePay first, then Payment Manager, then others
+    const providers = [];
+
+    if (this.router.isProviderEnabled('mugglepay')) {
+      providers.push('mugglepay');
+    }
+    if (this.router.isProviderEnabled('payment-manager')) {
+      providers.push('payment-manager');
+    }
+    if (this.router.isProviderEnabled('daimo')) {
+      providers.push('daimo');
+    }
+    if (this.router.isProviderEnabled('aqua')) {
+      providers.push('aqua');
+    }
+
+    return providers;
   }
 
   async getPaymentByExternalId(externalId: string): Promise<PaymentResponse> {
