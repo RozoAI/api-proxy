@@ -86,10 +86,13 @@ export class PaymentDatabase {
       .single();
 
     if (!errorById && dataById) {
+      console.log('[Database] Found payment by internal ID:', id);
       return dataById;
     }
 
-    // If not found by internal ID, try to find by external_id
+    // If not found by internal ID, try to find by external_id (exact match)
+    // This handles both Payment Manager IDs (429f087f-9edc-4fb4-b832-fc497ac39817)
+    // and MugglePay IDs (mugglepay_order_dc9ba4f6-4ee3-4518-b2cb-62ead3438e96)
     const { data: dataByExternalId, error: errorByExternalId } = await this.supabase
       .from('payments')
       .select('*')
