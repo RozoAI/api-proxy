@@ -518,6 +518,7 @@ async function processPaymentCallback(
           pay_currency: priceCurrency,
           status: 'PAID',
           created_at: new Date().toISOString(),
+          metadata,
           meta: {
             user_address: evmAddress,
             plan_type: metadata.planId
@@ -536,6 +537,7 @@ async function processPaymentCallback(
           order_id: orderId,
           merchant_order_id: merchantOrderId,
           evm_address: evmAddress,
+          metadata,
         };
       }
 
