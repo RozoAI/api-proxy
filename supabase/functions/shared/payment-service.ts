@@ -20,15 +20,20 @@ export class PaymentService {
       preferredTokenAddress: paymentData.preferredTokenAddress,
       withdrawalAddress: paymentData.destination.destinationAddress,
       withdrawalAmount: paymentData.destination.amountUnits,
-      callbackUrl: paymentData.callbackUrl,
+      callbackUrl: paymentData.metadata?.callbackUrl || paymentData.callbackUrl,
     });
 
+    const data = {
+      ...paymentData,
+      callbackUrl: paymentData.metadata?.callbackUrl || paymentData.callbackUrl,
+    };
+
     // Route to appropriate provider based on preferred chain
-    const paymentResponse = await this.router.createPayment(paymentData);
+    const paymentResponse = await this.router.createPayment(data);
 
     // Save to database with routing information
-    const providerName = this.router.getProviderForChain(paymentData.preferredChain);
-    await this.db.createPayment(paymentData, paymentResponse, providerName);
+    const providerName = this.router.getProviderForChain(data.preferredChain);
+    await this.db.createPayment(data, paymentResponse, providerName);
 
     console.log('[PaymentService] Payment created successfully:', {
       paymentId: paymentResponse.id,
@@ -50,15 +55,17 @@ export class PaymentService {
         external_id: cachedPayment.external_id,
         provider: cachedPayment.provider_name,
         status: cachedPayment.status,
-        chain: cachedPayment.chain_id
+        chain: cachedPayment.chain_id,
       });
 
       // For MugglePay orders or completed orders, always return cached data
       // No need to fetch from MugglePay API since we don't have the credentials
-      if (cachedPayment.provider_name === 'mugglepay' ||
-          cachedPayment.status === 'payment_completed' ||
-          cachedPayment.status === 'payment_bounced' ||
-          cachedPayment.status === 'payment_refunded') {
+      if (
+        cachedPayment.provider_name === 'mugglepay' ||
+        cachedPayment.status === 'payment_completed' ||
+        cachedPayment.status === 'payment_bounced' ||
+        cachedPayment.status === 'payment_refunded'
+      ) {
         return this.db.convertToPaymentResponse(cachedPayment);
       }
 
@@ -102,7 +109,6 @@ export class PaymentService {
     console.log('[PaymentService] Payment not found in database:', paymentId);
     throw new Error('Payment not found');
   }
-
 
   async getPaymentByExternalId(externalId: string): Promise<PaymentResponse> {
     console.log('[PaymentService] Getting payment by external ID:', externalId);
